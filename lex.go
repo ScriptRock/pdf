@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"io"
 	"strconv"
+	"strings"
 
 	"github.com/njupg/pdf/internal/decrypter"
 	"github.com/njupg/pdf/internal/types"
@@ -380,7 +381,16 @@ func (b *buffer) readObject() types.Object {
 	}
 
 	if str, ok := tok.(string); ok && b.objptr.ID != 0 {
-		tok = b.decrypter.DecryptString(b.objptr, str)
+		r, err := b.decrypter.Decrypt(b.objptr, strings.NewReader(str))
+		if err != nil {
+			b.errorf("failed to decrypt string: %s", err)
+		}
+
+		bb, err := io.ReadAll(r)
+		if err != nil {
+			b.errorf("failed to read decrypted string: %s", err)
+		}
+		tok = string(bb)
 	}
 
 	if !b.allowObjptr {

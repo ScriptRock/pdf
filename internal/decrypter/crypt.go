@@ -200,16 +200,16 @@ type Decrypter struct {
 
 func (d *Decrypter) aes() bool { return d.v == 4 || d.v == 5 }
 
-func (d *Decrypter) DecryptedStream(ptr types.Objptr, rd io.Reader) io.Reader {
+func (d *Decrypter) Decrypt(ptr types.Objptr, rd io.Reader) (io.Reader, error) {
 	if d == nil {
-		return rd
+		return rd, nil
 	}
 
 	key := d.cryptKey(ptr)
 	if d.aes() {
 		cb, err := aes.NewCipher(key)
 		if err != nil {
-			panic("AES: " + err.Error())
+			return nil, fmt.Errorf("bad AES key: %w", err)
 		}
 		iv := make([]byte, 16)
 		io.ReadFull(rd, iv)
@@ -219,35 +219,7 @@ func (d *Decrypter) DecryptedStream(ptr types.Objptr, rd io.Reader) io.Reader {
 		c, _ := rc4.NewCipher(key)
 		rd = &cipher.StreamReader{S: c, R: rd}
 	}
-	return rd
-}
-
-func (d *Decrypter) DecryptString(ptr types.Objptr, x string) string {
-	if d == nil {
-		return x
-	}
-
-	key := d.cryptKey(ptr)
-	if d.aes() {
-		s := []byte(x)
-		if len(s) < aes.BlockSize {
-			panic("Encrypted text shorter that AES block size")
-		}
-
-		block, _ := aes.NewCipher(key)
-		iv := s[:aes.BlockSize]
-		s = s[aes.BlockSize:]
-
-		stream := cipher.NewCBCDecrypter(block, iv)
-		stream.CryptBlocks(s, s)
-		x = string(s)
-	} else {
-		c, _ := rc4.NewCipher(key)
-		data := []byte(x)
-		c.XORKeyStream(data, data)
-		x = string(data)
-	}
-	return x
+	return rd, nil
 }
 
 func (d *Decrypter) cryptKey(ptr types.Objptr) []byte {

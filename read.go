@@ -783,7 +783,11 @@ func (v Value) Reader() io.ReadCloser {
 	}
 	var rd io.Reader
 	rd = io.NewSectionReader(v.r.f, x.Offset, v.Key("Length").Int64())
-	rd = v.r.decrypter.DecryptedStream(x.Ptr, rd)
+	var err error
+	rd, err = v.r.decrypter.Decrypt(x.Ptr, rd)
+	if err != nil {
+		panic(fmt.Errorf("bad decryption: %w", err))
+	}
 	filter := v.Key("Filter")
 	param := v.Key("DecodeParms")
 	switch filter.Kind() {
