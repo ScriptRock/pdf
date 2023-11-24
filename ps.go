@@ -5,7 +5,6 @@
 package pdf
 
 import (
-	"fmt"
 	"io"
 )
 
@@ -50,7 +49,6 @@ func newDict() Value {
 // points to Unicode code points.
 //
 // There is no support for executable blocks, among other limitations.
-//
 func Interpret(strm Value, do func(stk *Stack, op string)) {
 	rd := strm.Reader()
 	b := newBuffer(rd, 0)
@@ -67,8 +65,6 @@ Reading:
 		}
 		if kw, ok := tok.(keyword); ok {
 			switch kw {
-			case "null", "[", "]", "<<", ">>":
-				break
 			default:
 				for i := len(dicts) - 1; i >= 0; i-- {
 					if v, ok := dicts[i][name(kw)]; ok {
@@ -78,6 +74,8 @@ Reading:
 				}
 				do(&stk, string(kw))
 				continue
+			case "null", "[", "]", "<<", ">>":
+				break
 			case "dict":
 				stk.Pop()
 				stk.Push(Value{nil, objptr{}, make(dict)})
@@ -121,18 +119,4 @@ Reading:
 		obj := b.readObject()
 		stk.Push(Value{nil, objptr{}, obj})
 	}
-}
-
-type seqReader struct {
-	rd     io.Reader
-	offset int64
-}
-
-func (r *seqReader) ReadAt(buf []byte, offset int64) (int, error) {
-	if offset != r.offset {
-		return 0, fmt.Errorf("non-sequential read of stream")
-	}
-	n, err := io.ReadFull(r.rd, buf)
-	r.offset += int64(n)
-	return n, err
 }
