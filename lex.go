@@ -10,6 +10,9 @@ import (
 	"fmt"
 	"io"
 	"strconv"
+
+	"github.com/njupg/pdf/internal/decrypter"
+	"github.com/njupg/pdf/internal/types"
 )
 
 // A token is a PDF token in the input stream, one of the following Go types:
@@ -21,9 +24,6 @@ import (
 //	keyword, a PDF keyword
 //	name, a PDF name without the leading slash
 type token interface{}
-
-// A name is a PDF name, without the leading slash.
-type name string
 
 // A keyword is a PDF keyword.
 // Delimiter tokens used in higher-level syntax,
@@ -42,9 +42,8 @@ type buffer struct {
 	allowObjptr bool
 	allowStream bool
 	eof         bool
-	key         []byte
-	useAES      bool
-	objptr      objptr
+	decrypter   *decrypter.Decrypter
+	objptr      types.Objptr
 }
 
 // newBuffer returns a new buffer reading from r at the given offset.
@@ -294,7 +293,7 @@ func (b *buffer) readName() token {
 		tmp = append(tmp, c)
 	}
 	b.tmp = tmp
-	return name(string(tmp))
+	return types.Name(string(tmp))
 }
 
 func (b *buffer) readKeyword() token {
@@ -365,43 +364,7 @@ func isReal(s string) bool {
 	return ndot == 1
 }
 
-// An object is a PDF syntax object, one of the following Go types:
-//
-//	bool, a PDF boolean
-//	int64, a PDF integer
-//	float64, a PDF real
-//	string, a PDF string literal
-//	name, a PDF name without the leading slash
-//	dict, a PDF dictionary
-//	array, a PDF array
-//	stream, a PDF stream
-//	objptr, a PDF object reference
-//	objdef, a PDF object definition
-//
-// An object may also be nil, to represent the PDF null.
-type object interface{}
-
-type dict map[name]object
-
-type array []object
-
-type stream struct {
-	hdr    dict
-	ptr    objptr
-	offset int64
-}
-
-type objptr struct {
-	id  uint32
-	gen uint16
-}
-
-type objdef struct {
-	ptr objptr
-	obj object
-}
-
-func (b *buffer) readObject() object {
+func (b *buffer) readObject() types.Object {
 	tok := b.readToken()
 	if kw, ok := tok.(keyword); ok {
 		switch kw {
@@ -416,8 +379,8 @@ func (b *buffer) readObject() object {
 		return nil
 	}
 
-	if str, ok := tok.(string); ok && b.key != nil && b.objptr.id != 0 {
-		tok = decryptString(b.key, b.useAES, b.objptr, str)
+	if str, ok := tok.(string); ok && b.objptr.ID != 0 {
+		tok = b.decrypter.DecryptString(b.objptr, str)
 	}
 
 	if !b.allowObjptr {
@@ -430,12 +393,12 @@ func (b *buffer) readObject() object {
 			tok3 := b.readToken()
 			switch tok3 {
 			case keyword("R"):
-				return objptr{uint32(t1), uint16(t2)}
+				return types.Objptr{ID: uint32(t1), Gen: uint16(t2)}
 			case keyword("obj"):
 				old := b.objptr
-				b.objptr = objptr{uint32(t1), uint16(t2)}
+				b.objptr = types.Objptr{ID: uint32(t1), Gen: uint16(t2)}
 				obj := b.readObject()
-				if _, ok := obj.(stream); !ok {
+				if _, ok := obj.(types.Stream); !ok {
 					tok4 := b.readToken()
 					if tok4 != keyword("endobj") {
 						b.errorf("missing endobj after indirect object definition")
@@ -443,7 +406,7 @@ func (b *buffer) readObject() object {
 					}
 				}
 				b.objptr = old
-				return objdef{objptr{uint32(t1), uint16(t2)}, obj}
+				return types.Objdef{Ptr: types.Objptr{ID: uint32(t1), Gen: uint16(t2)}, Obj: obj}
 			}
 			b.unreadToken(tok3)
 		}
@@ -452,10 +415,13 @@ func (b *buffer) readObject() object {
 	return tok
 }
 
-func (b *buffer) readArray() object {
-	var x array
+func (b *buffer) readArray() types.Object {
+	var x types.Array
 	for {
 		tok := b.readToken()
+		if tok == io.EOF {
+			b.errorf("stream ended with open array")
+		}
 		if tok == nil || tok == keyword("]") {
 			break
 		}
@@ -465,16 +431,19 @@ func (b *buffer) readArray() object {
 	return x
 }
 
-func (b *buffer) readDict() object {
-	x := make(dict)
+func (b *buffer) readDict() types.Object {
+	x := make(types.Dict)
 	for {
 		tok := b.readToken()
+		if tok == io.EOF {
+			b.errorf("stream ended with open dict")
+		}
 		if tok == nil || tok == keyword(">>") {
 			break
 		}
-		n, ok := tok.(name)
+		n, ok := tok.(types.Name)
 		if !ok {
-			b.errorf("unexpected non-name key %T(%v) parsing dictionary", tok, tok)
+			b.errorf("unexpected non-name key %#v parsing dictionary", tok)
 			continue
 		}
 		x[n] = b.readObject()
@@ -501,7 +470,7 @@ func (b *buffer) readDict() object {
 		b.errorf("stream keyword not followed by newline")
 	}
 
-	return stream{x, b.objptr, b.readOffset()}
+	return types.Stream{Hdr: x, Ptr: b.objptr, Offset: b.readOffset()}
 }
 
 func isSpace(b byte) bool {

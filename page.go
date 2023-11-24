@@ -343,7 +343,7 @@ func readCmap(toUnicode Value) *cmap {
 	n := -1
 	var m cmap
 	ok := true
-	Interpret(toUnicode, func(stk *Stack, op string) {
+	Interpret(toUnicode.Reader(), func(stk *Stack, op string) {
 		if !ok {
 			return
 		}
@@ -498,7 +498,7 @@ func (p Page) GetPlainText(fonts map[string]*Font) (result string, err error) {
 		}
 	}
 
-	Interpret(strm, func(stk *Stack, op string) {
+	Interpret(strm.Reader(), func(stk *Stack, op string) {
 		n := stk.Len()
 		args := make([]Value, n)
 		for i := n - 1; i >= 0; i-- {
@@ -702,7 +702,7 @@ func (p Page) walkTextBlocks(walker func(enc TextEncoding, x, y float64, s strin
 
 	var enc TextEncoding = &nopEncoder{}
 	var currentX, currentY float64
-	Interpret(strm, func(stk *Stack, op string) {
+	Interpret(strm.Reader(), func(stk *Stack, op string) {
 		n := stk.Len()
 		args := make([]Value, n)
 		for i := n - 1; i >= 0; i-- {
@@ -797,7 +797,7 @@ func (p Page) Content() Content {
 
 	var rect []Rect
 	var gstack []gstate
-	Interpret(strm, func(stk *Stack, op string) {
+	Interpret(strm.Reader(), func(stk *Stack, op string) {
 		n := stk.Len()
 		args := make([]Value, n)
 		for i := n - 1; i >= 0; i-- {
@@ -805,9 +805,6 @@ func (p Page) Content() Content {
 		}
 		switch op {
 		default:
-			// if DebugOn {
-			// 	fmt.Println(op, args)
-			// }
 			return
 
 		case "cm": // update g.CTM

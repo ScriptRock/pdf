@@ -6,6 +6,8 @@ package pdf
 
 import (
 	"io"
+
+	"github.com/njupg/pdf/internal/types"
 )
 
 // A Stack represents a stack of values.
@@ -33,7 +35,7 @@ func (stk *Stack) Pop() Value {
 }
 
 func newDict() Value {
-	return Value{nil, objptr{}, make(dict)}
+	return Value{nil, types.Objptr{}, make(types.Dict)}
 }
 
 // Interpret interprets the content in a stream as a basic PostScript program,
@@ -49,14 +51,13 @@ func newDict() Value {
 // points to Unicode code points.
 //
 // There is no support for executable blocks, among other limitations.
-func Interpret(strm Value, do func(stk *Stack, op string)) {
-	rd := strm.Reader()
+func Interpret(rd io.Reader, do func(stk *Stack, op string)) {
 	b := newBuffer(rd, 0)
 	b.allowEOF = true
 	b.allowObjptr = false
 	b.allowStream = false
 	var stk Stack
-	var dicts []dict
+	var dicts []types.Dict
 Reading:
 	for {
 		tok := b.readToken()
@@ -67,8 +68,8 @@ Reading:
 			switch kw {
 			default:
 				for i := len(dicts) - 1; i >= 0; i-- {
-					if v, ok := dicts[i][name(kw)]; ok {
-						stk.Push(Value{nil, objptr{}, v})
+					if v, ok := dicts[i][types.Name(kw)]; ok {
+						stk.Push(Value{nil, types.Objptr{}, v})
 						continue Reading
 					}
 				}
@@ -78,20 +79,20 @@ Reading:
 				break
 			case "dict":
 				stk.Pop()
-				stk.Push(Value{nil, objptr{}, make(dict)})
+				stk.Push(Value{nil, types.Objptr{}, make(types.Dict)})
 				continue
 			case "currentdict":
 				if len(dicts) == 0 {
 					panic("no current dictionary")
 				}
-				stk.Push(Value{nil, objptr{}, dicts[len(dicts)-1]})
+				stk.Push(Value{nil, types.Objptr{}, dicts[len(dicts)-1]})
 				continue
 			case "begin":
 				d := stk.Pop()
 				if d.Kind() != Dict {
 					panic("cannot begin non-dict")
 				}
-				dicts = append(dicts, d.data.(dict))
+				dicts = append(dicts, d.data.(types.Dict))
 				continue
 			case "end":
 				if len(dicts) <= 0 {
@@ -104,7 +105,7 @@ Reading:
 					panic("def without open dict")
 				}
 				val := stk.Pop()
-				key, ok := stk.Pop().data.(name)
+				key, ok := stk.Pop().data.(types.Name)
 				if !ok {
 					panic("def of non-name")
 				}
@@ -117,6 +118,6 @@ Reading:
 		}
 		b.unreadToken(tok)
 		obj := b.readObject()
-		stk.Push(Value{nil, objptr{}, obj})
+		stk.Push(Value{nil, types.Objptr{}, obj})
 	}
 }
