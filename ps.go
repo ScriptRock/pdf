@@ -89,7 +89,7 @@ Reading:
 				continue
 			case "begin":
 				d := stk.Pop()
-				if d.Kind() != Dict {
+				if d.Kind() != DictKind {
 					panic("cannot begin non-dict")
 				}
 				dicts = append(dicts, d.data.(types.Dict))

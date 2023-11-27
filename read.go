@@ -45,19 +45,8 @@
 // in other packages as needed.
 package pdf
 
-// BUG(rsc): The package is incomplete, although it has been used successfully on some
-// large real-world PDF files.
-
-// BUG(rsc): There is no support for closing open PDF files. If you drop all references to a Reader,
-// the underlying reader will eventually be garbage collected.
-
 // BUG(rsc): The library makes no attempt at efficiency. A value cache maintained in the Reader
 // would probably help significantly.
-
-// BUG(rsc): The support for reading encrypted files is weak.
-
-// BUG(rsc): The Value API does not support error reporting. The intent is to allow users to
-// set an error reporting callback in Reader, but that code has not been implemented.
 
 import (
 	"bytes"
@@ -67,11 +56,10 @@ import (
 	"io"
 	"log/slog"
 	"os"
-	"sort"
-	"strconv"
 
 	"github.com/njupg/pdf/internal/decrypter"
 	"github.com/njupg/pdf/internal/types"
+	"github.com/njupg/pdf/text"
 )
 
 // A Reader is a single PDF file open for reading.
@@ -85,31 +73,32 @@ type Reader struct {
 }
 
 // Open opens a file for reading.
-func Open(file string) (*os.File, *Reader, error) {
+// Reader.Close should be called when done with the Reader.
+func Open(file string) (*Reader, error) {
 	f, err := os.Open(file)
 	if err != nil {
 		f.Close()
-		return nil, nil, err
+		return nil, err
 	}
 	fi, err := f.Stat()
 	if err != nil {
 		f.Close()
-		return nil, nil, err
+		return nil, err
 	}
 	reader, err := NewReader(f, fi.Size())
-	return f, reader, err
+	return reader, err
 }
 
 // NewReader opens a file for reading, using the data in f with the given total size.
 func NewReader(f io.ReaderAt, size int64) (*Reader, error) {
-	return NewReaderEncrypted(f, size, nil)
+	return NewReaderEncrypted(f, size, "")
 }
 
 // NewReaderEncrypted opens a file for reading, using the data in f with the given total size.
 // If the PDF is encrypted, NewReaderEncrypted calls pw repeatedly to obtain passwords
 // to try. If pw returns the empty string, NewReaderEncrypted stops trying to decrypt
 // the file and returns an error.
-func NewReaderEncrypted(f io.ReaderAt, size int64, pw func() string) (*Reader, error) {
+func NewReaderEncrypted(f io.ReaderAt, size int64, pw string) (*Reader, error) {
 	buf := make([]byte, 10)
 	f.ReadAt(buf, 0)
 	if !bytes.HasPrefix(buf, []byte("%PDF-1.")) || buf[7] < '0' || buf[7] > '7' || buf[8] != '\r' && buf[8] != '\n' {
@@ -159,26 +148,42 @@ func NewReaderEncrypted(f io.ReaderAt, size int64, pw func() string) (*Reader, e
 	if err == nil {
 		return r, nil
 	}
-	if pw == nil || err != decrypter.ErrInvalidPassword {
+	if pw == "" || err != decrypter.ErrInvalidPassword {
 		return nil, err
 	}
-	for {
-		next := pw()
-		if next == "" {
-			break
-		}
-		if r.initEncrypt(next) == nil {
-			return r, nil
-		}
+
+	if r.initEncrypt(pw) == nil {
+		return r, nil
 	}
 	return nil, err
 }
 
-// Trailer returns the file's Trailer value.
-func (r *Reader) Trailer() Value {
+// Close closes the underlying Reader if it is an io.Closer.
+func (r *Reader) Close() error {
+	if c, ok := r.f.(io.Closer); ok {
+		return c.Close()
+	}
+
+	return nil
+}
+
+func (r *Reader) trailerValue() Value {
 	return Value{r, r.trailerptr, r.trailer}
 }
 
+func (r *Reader) GetText() ([]text.Text, error) {
+	var tt []text.Text
+	for i := 1; i <= r.NumPage(); i++ {
+		p := r.Page(i)
+		t, err := p.GetText()
+		if err != nil {
+			return nil, fmt.Errorf("failed to read page text: %w", err)
+		}
+		tt = append(tt, t)
+	}
+
+	return tt, nil
+}
 func readXref(r *Reader, b *buffer) ([]types.Xref, types.Objptr, types.Dict, error) {
 	tok := b.readToken()
 	if tok == keyword("xref") {
@@ -233,7 +238,7 @@ func readXrefStream(r *Reader, b *buffer) ([]types.Xref, types.Objptr, types.Dic
 		}
 		prevoff = prevstrm.Hdr["Prev"]
 		prev := Value{r, types.Objptr{}, prevstrm}
-		if prev.Kind() != Stream {
+		if prev.Kind() != StreamKind {
 			return nil, types.Objptr{}, nil, fmt.Errorf("malformed PDF: xref prev stream is not stream: %v", prev)
 		}
 		if prev.Key("Type").Name() != "XRef" {
@@ -426,273 +431,6 @@ func findLastLine(buf []byte, s string) int {
 	}
 }
 
-// A Value is a single PDF value, such as an integer, dictionary, or array.
-// The zero Value is a PDF null (Kind() == Null, IsNull() = true).
-type Value struct {
-	r    *Reader
-	ptr  types.Objptr
-	data interface{}
-}
-
-// IsNull reports whether the value is a null. It is equivalent to Kind() == Null.
-func (v Value) IsNull() bool {
-	return v.data == nil
-}
-
-// A ValueKind specifies the kind of data underlying a Value.
-type ValueKind int
-
-// The PDF value kinds.
-const (
-	Null ValueKind = iota
-	Bool
-	Integer
-	Real
-	String
-	Name
-	Dict
-	Array
-	Stream
-)
-
-// Kind reports the kind of value underlying v.
-func (v Value) Kind() ValueKind {
-	switch v.data.(type) {
-	default:
-		return Null
-	case bool:
-		return Bool
-	case int64:
-		return Integer
-	case float64:
-		return Real
-	case string:
-		return String
-	case types.Name:
-		return Name
-	case types.Dict:
-		return Dict
-	case types.Array:
-		return Array
-	case types.Stream:
-		return Stream
-	}
-}
-
-// String returns a textual representation of the value v.
-// Note that String is not the accessor for values with Kind() == String.
-// To access such values, see RawString, Text, and TextFromUTF16.
-func (v Value) String() string {
-	return objfmt(v.data)
-}
-
-func objfmt(x interface{}) string {
-	switch x := x.(type) {
-	default:
-		return fmt.Sprint(x)
-	case string:
-		if isPDFDocEncoded(x) {
-			return strconv.Quote(pdfDocDecode(x))
-		}
-		if isUTF16(x) {
-			return strconv.Quote(utf16Decode(x[2:]))
-		}
-		return strconv.Quote(x)
-	case types.Name:
-		return "/" + string(x)
-	case types.Dict:
-		var keys []string
-		for k := range x {
-			keys = append(keys, string(k))
-		}
-		sort.Strings(keys)
-		var buf bytes.Buffer
-		buf.WriteString("<<")
-		for i, k := range keys {
-			elem := x[types.Name(k)]
-			if i > 0 {
-				buf.WriteString(" ")
-			}
-			buf.WriteString("/")
-			buf.WriteString(k)
-			buf.WriteString(" ")
-			buf.WriteString(objfmt(elem))
-		}
-		buf.WriteString(">>")
-		return buf.String()
-
-	case types.Array:
-		var buf bytes.Buffer
-		buf.WriteString("[")
-		for i, elem := range x {
-			if i > 0 {
-				buf.WriteString(" ")
-			}
-			buf.WriteString(objfmt(elem))
-		}
-		buf.WriteString("]")
-		return buf.String()
-
-	case types.Stream:
-		return fmt.Sprintf("%v@%d", objfmt(x.Hdr), x.Offset)
-
-	case types.Objptr:
-		return fmt.Sprintf("%d %d R", x.ID, x.Gen)
-
-	case types.Objdef:
-		return fmt.Sprintf("{%d %d obj}%v", x.Ptr.ID, x.Ptr.Gen, objfmt(x.Obj))
-	}
-}
-
-// Bool returns v's boolean value.
-// If v.Kind() != Bool, Bool returns false.
-func (v Value) Bool() bool {
-	x, ok := v.data.(bool)
-	if !ok {
-		return false
-	}
-	return x
-}
-
-// Int64 returns v's int64 value.
-// If v.Kind() != Int64, Int64 returns 0.
-func (v Value) Int64() int64 {
-	x, ok := v.data.(int64)
-	if !ok {
-		return 0
-	}
-	return x
-}
-
-// Float64 returns v's float64 value, converting from integer if necessary.
-// If v.Kind() != Float64 and v.Kind() != Int64, Float64 returns 0.
-func (v Value) Float64() float64 {
-	x, ok := v.data.(float64)
-	if !ok {
-		x, ok := v.data.(int64)
-		if ok {
-			return float64(x)
-		}
-		return 0
-	}
-	return x
-}
-
-// RawString returns v's string value.
-// If v.Kind() != String, RawString returns the empty string.
-func (v Value) RawString() string {
-	x, ok := v.data.(string)
-	if !ok {
-		return ""
-	}
-	return x
-}
-
-// Text returns v's string value interpreted as a “text string” (defined in the PDF spec)
-// and converted to UTF-8.
-// If v.Kind() != String, Text returns the empty string.
-func (v Value) Text() string {
-	x, ok := v.data.(string)
-	if !ok {
-		return ""
-	}
-	if isPDFDocEncoded(x) {
-		return pdfDocDecode(x)
-	}
-	if isUTF16(x) {
-		return utf16Decode(x[2:])
-	}
-	return x
-}
-
-// TextFromUTF16 returns v's string value interpreted as big-endian UTF-16
-// and then converted to UTF-8.
-// If v.Kind() != String or if the data is not valid UTF-16, TextFromUTF16 returns
-// the empty string.
-func (v Value) TextFromUTF16() string {
-	x, ok := v.data.(string)
-	if !ok {
-		return ""
-	}
-	if len(x)%2 == 1 {
-		return ""
-	}
-	if x == "" {
-		return ""
-	}
-	return utf16Decode(x)
-}
-
-// Name returns v's name value.
-// If v.Kind() != Name, Name returns the empty string.
-// The returned name does not include the leading slash:
-// if v corresponds to the name written using the syntax /Helvetica,
-// Name() == "Helvetica".
-func (v Value) Name() string {
-	x, ok := v.data.(types.Name)
-	if !ok {
-		return ""
-	}
-	return string(x)
-}
-
-// Key returns the value associated with the given name key in the dictionary v.
-// Like the result of the Name method, the key should not include a leading slash.
-// If v is a stream, Key applies to the stream's header dictionary.
-// If v.Kind() != Dict and v.Kind() != Stream, Key returns a null Value.
-func (v Value) Key(key string) Value {
-	x, ok := v.data.(types.Dict)
-	if !ok {
-		strm, ok := v.data.(types.Stream)
-		if !ok {
-			return Value{}
-		}
-		x = strm.Hdr
-	}
-	return v.r.resolve(v.ptr, x[types.Name(key)])
-}
-
-// Keys returns a sorted list of the keys in the dictionary v.
-// If v is a stream, Keys applies to the stream's header dictionary.
-// If v.Kind() != Dict and v.Kind() != Stream, Keys returns nil.
-func (v Value) Keys() []string {
-	x, ok := v.data.(types.Dict)
-	if !ok {
-		strm, ok := v.data.(types.Stream)
-		if !ok {
-			return nil
-		}
-		x = strm.Hdr
-	}
-	keys := []string{} // not nil
-	for k := range x {
-		keys = append(keys, string(k))
-	}
-	sort.Strings(keys)
-	return keys
-}
-
-// Index returns the i'th element in the array v.
-// If v.Kind() != Array or if i is outside the array bounds,
-// Index returns a null Value.
-func (v Value) Index(i int) Value {
-	x, ok := v.data.(types.Array)
-	if !ok || i < 0 || i >= len(x) {
-		return Value{}
-	}
-	return v.r.resolve(v.ptr, x[i])
-}
-
-// Len returns the length of the array v.
-// If v.Kind() != Array, Len returns 0.
-func (v Value) Len() int {
-	x, ok := v.data.(types.Array)
-	if !ok {
-		return 0
-	}
-	return len(x)
-}
-
 func (r *Reader) resolve(parent types.Objptr, x interface{}) Value {
 	if ptr, ok := x.(types.Objptr); ok {
 		if ptr.ID >= uint32(len(r.xref)) {
@@ -707,7 +445,7 @@ func (r *Reader) resolve(parent types.Objptr, x interface{}) Value {
 			strm := r.resolve(parent, xref.Stream)
 		Search:
 			for {
-				if strm.Kind() != Stream {
+				if strm.Kind() != StreamKind {
 					panic("not a stream")
 				}
 				if strm.Key("Type").Name() != "ObjStm" {
@@ -730,7 +468,7 @@ func (r *Reader) resolve(parent types.Objptr, x interface{}) Value {
 					}
 				}
 				ext := strm.Key("Extends")
-				if ext.Kind() != Stream {
+				if ext.Kind() != StreamKind {
 					panic("cannot find object in stream")
 				}
 				strm = ext
@@ -793,11 +531,11 @@ func (v Value) Reader() io.ReadCloser {
 	switch filter.Kind() {
 	default:
 		panic(fmt.Errorf("unsupported filter %v", filter))
-	case Null:
+	case NullKind:
 		// ok
-	case Name:
+	case NameKind:
 		rd = applyFilter(rd, filter.Name(), param)
-	case Array:
+	case ArrayKind:
 		for i := 0; i < filter.Len(); i++ {
 			rd = applyFilter(rd, filter.Index(i).Name(), param.Index(i))
 		}
@@ -820,7 +558,7 @@ func applyFilter(rd io.Reader, name string, param Value) io.Reader {
 			panic(err)
 		}
 		pred := param.Key("Predictor")
-		if pred.Kind() == Null {
+		if pred.Kind() == NullKind {
 			return zr
 		}
 		columns := param.Key("Columns").Int64()

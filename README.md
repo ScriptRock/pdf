@@ -1,138 +1,36 @@
 # PDF Reader
 
-[![Built with WeBuild](https://raw.githubusercontent.com/webuild-community/badge/master/svg/WeBuild.svg)](https://webuild.community)
+A simple Go library which enables reading PDF files text content.
+Fork tree:
+- https://github.com/ledongthuc/pdf
+- https://github.com/rsc/pdf
 
-A simple Go library which enables reading PDF files. Forked from https://github.com/rsc/pdf
+`Reader.GetText` returns the text content annotated with text size and weight information.
+Text is returned in stream order - irrespectve of where it appears on the page, the returned
+text order is how it appears in the PDF stream.
 
-Features
-  - Get plain text content (without format)
-  - Get Content (including all font and formatting information)
+Attempts are made to separate text blocks that are displayed in separate blocks in the PDF as
+separate paragraphs.
 
-## Install:
+e.g. with tabular PDF content:
 
-`go get -u github.com/ledongthuc/pdf`
+| Col 1 header        | Col 2 header        |
+| ------------------- | ------------------- |
+| Text in row 1 col 1 | Text in row 1 col 2 |
+| Text in row 2 col 1 | Text in row 2 col 2 |
 
+`Reader.GetText` returns content as:
 
-## Read plain text
-
-```golang
-package main
-
-import (
-	"bytes"
-	"fmt"
-
-	"github.com/ledongthuc/pdf"
-)
-
-func main() {
-	pdf.DebugOn = true
-	content, err := readPdf("test.pdf") // Read local pdf file
-	if err != nil {
-		panic(err)
-	}
-	fmt.Println(content)
-	return
-}
-
-func readPdf(path string) (string, error) {
-	f, r, err := pdf.Open(path)
-	// remember close file
-    defer f.Close()
-	if err != nil {
-		return "", err
-	}
-	var buf bytes.Buffer
-    b, err := r.GetPlainText()
-    if err != nil {
-        return "", err
-    }
-    buf.ReadFrom(b)
-	return buf.String(), nil
-}
 ```
+Col 1 header
 
-## Read all text with styles from PDF
+Col 2 header
 
-```golang
-func readPdf2(path string) (string, error) {
-	f, r, err := pdf.Open(path)
-	// remember close file
-	defer f.Close()
-	if err != nil {
-		return "", err
-	}
-	totalPage := r.NumPage()
+Text in row 1 col 1
 
-	for pageIndex := 1; pageIndex <= totalPage; pageIndex++ {
-		p := r.Page(pageIndex)
-		if p.V.IsNull() {
-			continue
-		}
-		var lastTextStyle pdf.Text
-		texts := p.Content().Text
-		for _, text := range texts {
-			if isSameSentence(text, lastTextStyle) {
-				lastTextStyle.S = lastTextStyle.S + text.S
-			} else {
-				fmt.Printf("Font: %s, Font-size: %f, x: %f, y: %f, content: %s \n", lastTextStyle.Font, lastTextStyle.FontSize, lastTextStyle.X, lastTextStyle.Y, lastTextStyle.S)
-				lastTextStyle = text
-			}
-		}
-	}
-	return "", nil
-}
+Text in row 1 col 2
+
+Text in row 2 col 1
+
+Text in row 2 col 2
 ```
-
-
-## Read text grouped by rows
-
-```golang
-package main
-
-import (
-	"fmt"
-	"os"
-
-	"github.com/ledongthuc/pdf"
-)
-
-func main() {
-	content, err := readPdf(os.Args[1]) // Read local pdf file
-	if err != nil {
-		panic(err)
-	}
-	fmt.Println(content)
-	return
-}
-
-func readPdf(path string) (string, error) {
-	f, r, err := pdf.Open(path)
-	defer func() {
-		_ = f.Close()
-	}()
-	if err != nil {
-		return "", err
-	}
-	totalPage := r.NumPage()
-
-	for pageIndex := 1; pageIndex <= totalPage; pageIndex++ {
-		p := r.Page(pageIndex)
-		if p.V.IsNull() {
-			continue
-		}
-
-		rows, _ := p.GetTextByRow()
-		for _, row := range rows {
-		    println(">>>> row: ", row.Position)
-		    for _, word := range row.Content {
-		        fmt.Println(word.S)
-		    }
-		}
-	}
-	return "", nil
-}
-```
-
-## Demo
-![Run example](https://i.gyazo.com/01fbc539e9872593e0ff6bac7e954e6d.gif)

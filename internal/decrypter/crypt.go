@@ -25,7 +25,8 @@ func New(password string, encrypt types.Dict, id string) (*Decrypter, error) {
 	o, _ := encrypt["O"].(string)
 	u, _ := encrypt["U"].(string)
 	p, _ := encrypt["P"].(int64)
-	P := uint32(p)
+	encMD, ok := encrypt["EncryptMetadata"].(bool)
+	encMD = !ok || encMD // Defaults to true.
 
 	if n%8 != 0 || n < 40 || (n > 128 && n != 256) {
 		return nil, fmt.Errorf("malformed PDF: %d-bit encryption key", n)
@@ -59,8 +60,11 @@ func New(password string, encrypt types.Dict, id string) (*Decrypter, error) {
 		h.Write(passwordPad[:32-len(pw)])
 	}
 	h.Write([]byte(o))
-	h.Write([]byte{byte(P), byte(P >> 8), byte(P >> 16), byte(P >> 24)})
+	h.Write([]byte{byte(p), byte(p >> 8), byte(p >> 16), byte(p >> 24)})
 	h.Write([]byte(id))
+	if r >= 4 && !encMD {
+		h.Write([]byte{0xff, 0xff, 0xff, 0xff})
+	}
 	key := h.Sum(nil)
 
 	if r >= 3 {
@@ -152,7 +156,8 @@ func newR6(password, u, ue, perms []byte) (*Decrypter, error) {
 	return &Decrypter{key: key, v: 5}, nil
 }
 
-// hashR6 implements Algorithm 2.B of ISO32000-2.
+// hashR6 implements
+// PDF_ISO_32000-2: 7.6.4.3.3 Algorithm 2.B: Computing a hash.
 func hashR6(p, salt []byte) []byte {
 	h := sha256.New()
 	h.Write(p)
