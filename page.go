@@ -98,9 +98,8 @@ func (p *Page) GetText() (result text.Text, err error) {
 	}
 
 	var (
-		out           text.Builder
-		textState     state.Text
-		graphicsState state.Graphics
+		out    text.Builder
+		gState state.Graphics
 	)
 
 	forEachStream(p, func(stk *Stack, op string) {
@@ -112,54 +111,54 @@ func (p *Page) GetText() (result text.Text, err error) {
 
 		switch op {
 		case "q":
-			graphicsState.Push()
+			gState.Push()
 		case "Q":
-			graphicsState.Pop()
+			gState.Pop()
 		case "cm":
-			graphicsState.CM(args[0].Float64(), args[1].Float64(), args[2].Float64(), args[3].Float64(), args[4].Float64(), args[5].Float64())
+			gState.CM(args[0].Float64(), args[1].Float64(), args[2].Float64(), args[3].Float64(), args[4].Float64(), args[5].Float64())
 
 		case "Tc":
-			textState.Tc(args[0].Float64())
+			gState.Tc(args[0].Float64())
 		case "Tw":
-			textState.Tw(args[0].Float64())
+			gState.Tw(args[0].Float64())
 		case "Tz":
-			textState.Tz(args[0].Float64())
+			gState.Tz(args[0].Float64())
 		case "TL":
-			textState.TL(args[0].Float64())
+			gState.TL(args[0].Float64())
 		case "BT":
-			textState.BT()
+			gState.BT()
 		case "ET":
-			textState.ET()
+			gState.ET()
 		case "Td":
-			textState.Td(args[0].Float64(), args[1].Float64())
+			gState.Td(args[0].Float64(), args[1].Float64())
 		case "TD":
-			textState.TD(args[0].Float64(), args[1].Float64())
+			gState.TD(args[0].Float64(), args[1].Float64())
 		case "Tm":
-			textState.Tm(args[0].Float64(), args[1].Float64(), args[2].Float64(), args[3].Float64(), args[4].Float64(), args[5].Float64())
+			gState.Tm(args[0].Float64(), args[1].Float64(), args[2].Float64(), args[3].Float64(), args[4].Float64(), args[5].Float64())
 		case "T*":
-			textState.Tstar()
+			gState.Tstar()
 		case "Tf":
-			textState.Tf(decoders[args[0].Name()], args[1].Float64())
+			gState.Tf(decoders[args[0].Name()], args[1].Float64())
 
 		case `"`:
-			textState.Tw(args[0].Float64())
-			textState.Tc(args[1].Float64())
+			gState.Tw(args[0].Float64())
+			gState.Tc(args[1].Float64())
 			args = args[2:]
 			fallthrough
 		case `'`:
-			textState.Tstar()
+			gState.Tstar()
 			fallthrough
 		case "Tj":
-			textState.Tj(graphicsState, &out, args[0].RawString())
+			gState.Tj(&out, args[0].RawString())
 		case "TJ":
 			arr := args[0]
 			for i := 0; i < arr.Len(); i++ {
 				e := arr.Index(i)
 				switch e.Kind() {
 				case StringKind:
-					textState.Tj(graphicsState, &out, e.RawString())
+					gState.Tj(&out, e.RawString())
 				case RealKind:
-					textState.TJAdjust(e.Float64())
+					gState.TJDisplace(e.Float64())
 				}
 			}
 		}

@@ -1,17 +1,17 @@
-package matrix
+package state
 
-func Identity() *Matrix {
-	return &Matrix{
+func identity() *matrix {
+	return &matrix{
 		{1, 0, 0},
 		{0, 1, 0},
 		{0, 0, 1},
 	}
 }
 
-type Matrix [3][3]float64
+type matrix [3][3]float64
 
-func (m *Matrix) Mul(n *Matrix) *Matrix {
-	var mn Matrix
+func (m *matrix) Mul(n *matrix) *matrix {
+	var mn matrix
 
 	for i := 0; i < 3; i++ {
 		for j := 0; j < 3; j++ {

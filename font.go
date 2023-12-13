@@ -10,7 +10,6 @@ func NewFont(v Value) *Font {
 	return &Font{
 		name:    v.Key("BaseFont").Name(),
 		Decoder: getDecoder(v),
-		widths:  getWidths(v),
 	}
 }
 
@@ -18,15 +17,11 @@ func NewFont(v Value) *Font {
 // The methods interpret a Font dictionary stored in V.
 type Font struct {
 	Decoder
-	name   string
-	widths widths
+	name string
 }
 
 // BaseFont returns the font's name (BaseFont property).
 func (f Font) Name() string { return f.name }
-
-// Width returns the width of the given code point.
-func (f Font) Width(code int) float64 { return f.widths.lookup(code) }
 
 func getWidths(v Value) widths {
 	switch v.Key("Subtype").String() {
@@ -50,7 +45,7 @@ func getWidths(v Value) widths {
 				i += 3
 			case ArrayKind:
 				values := ww.Index(i)
-				span.last = span.first + values.Len()
+				span.last = span.first + values.Len() - 1
 				span.linear = make([]float64, values.Len())
 				for j := 0; j < values.Len(); j++ {
 					span.linear[j] = values.Index(j).Float64()
@@ -59,6 +54,7 @@ func getWidths(v Value) widths {
 			default:
 				panic("bad w:" + ww.String())
 			}
+			spans = append(spans, span)
 		}
 
 		return widths{defaultW: dw, spans: spans}
@@ -80,38 +76,35 @@ func getWidths(v Value) widths {
 }
 
 func getDecoder(v Value) Decoder {
+	widths := getWidths(v)
+
 	enc := v.Key("Encoding")
 	switch enc.Kind() {
 	case NameKind:
 		switch enc.Name() {
 		case "WinAnsiEncoding":
-			return encoding.WinANSI()
+			return encoding.WinANSI(widths)
 		case "MacRomanEncoding":
-			return encoding.MacRoman()
+			return encoding.MacRoman(widths)
 		case "Identity-H":
-			return charmapEncoding(v)
+			return charmapEncoding(v, widths)
 		default:
-			slog.Debug("unknown encoding", slog.String("name", enc.Name()))
-			return encoding.None{}
 		}
-	case DictKind:
-		return &encoding.Dict{Elements: enc.Key("Differences").RawElements(NameKind, IntegerKind)}
 	case NullKind:
-		return charmapEncoding(v)
-	default:
-		slog.Debug("unexpected encoding", slog.String("encoding", enc.String()))
-		return encoding.None{}
+		return charmapEncoding(v, widths)
 	}
+
+	panic("unsupported encoding: " + v.String())
 }
 
-func charmapEncoding(v Value) Decoder {
+func charmapEncoding(v Value, widths widths) Decoder {
 	toUnicode := v.Key("ToUnicode")
 	if toUnicode.Kind() != StreamKind {
-		return encoding.PDFDoc()
+		return encoding.PDFDoc(widths)
 	}
 
 	n := -1
-	var m encoding.CMap
+	m := encoding.CMap{Widths: widths}
 	ok := true
 	Interpret(toUnicode.Reader(), func(stk *Stack, op string) {
 		if !ok {
@@ -181,7 +174,7 @@ func charmapEncoding(v Value) Decoder {
 		}
 	})
 	if !ok {
-		return encoding.None{}
+		panic("unsupported encoding: " + v.String())
 	}
 	return &m
 }
@@ -197,7 +190,7 @@ type span struct {
 	linear      []float64
 }
 
-func (w widths) lookup(code int) float64 {
+func (w widths) CodeWidth(code int) float64 {
 	for _, s := range w.spans {
 		if code >= s.first && code <= s.last {
 			switch {

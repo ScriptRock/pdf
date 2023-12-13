@@ -5,5 +5,5 @@ package pdf
 type Decoder interface {
 	// Decode returns the UTF-8 text corresponding to
 	// the sequence of code points in raw.
-	Decode(raw string) string
+	Decode(raw string) (string, float64)
 }

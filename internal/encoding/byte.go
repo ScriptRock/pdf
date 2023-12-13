@@ -3,20 +3,24 @@ package encoding
 import "unicode"
 
 type Byte struct {
-	table *[256]rune
+	table  *[256]rune
+	widths Sizer
 }
 
-func (e *Byte) Decode(raw string) string {
+func (e *Byte) Decode(raw string) (string, float64) {
+	var w float64
 	r := make([]rune, 0, len(raw))
 	for i := 0; i < len(raw); i++ {
-		r = append(r, e.table[raw[i]])
+		code := raw[i]
+		r = append(r, e.table[code])
+		w += e.widths.CodeWidth(int(code))
 	}
-	return string(r)
+	return string(r), w
 }
 
-func WinANSI() *Byte  { return &Byte{table: &winAnsiEncoding} }
-func MacRoman() *Byte { return &Byte{table: &macRomanEncoding} }
-func PDFDoc() *Byte   { return &Byte{table: &pdfDocEncoding} }
+func WinANSI(s Sizer) *Byte  { return &Byte{table: &winAnsiEncoding, widths: s} }
+func MacRoman(s Sizer) *Byte { return &Byte{table: &macRomanEncoding, widths: s} }
+func PDFDoc(s Sizer) *Byte   { return &Byte{table: &pdfDocEncoding, widths: s} }
 
 const NoRune = unicode.ReplacementChar
 

@@ -184,6 +184,7 @@ func (r *Reader) GetText() ([]text.Text, error) {
 
 	return tt, nil
 }
+
 func readXref(r *Reader, b *buffer) ([]types.Xref, types.Objptr, types.Dict, error) {
 	tok := b.readToken()
 	if tok == keyword("xref") {

@@ -2,14 +2,11 @@ package state
 
 import (
 	"math"
-
-	"github.com/njupg/pdf/internal/matrix"
 )
 
 type Font interface {
 	Name() string
-	Width(c int) float64
-	Decode(string) string
+	Decode(string) (string, float64)
 }
 
 // Text holds most state defined in:
@@ -20,25 +17,23 @@ type Font interface {
 // and
 // PDF_ISO_32000-2: Table 106: Text-positioning operators
 type Text struct {
-	tc    unscaled
-	tw    unscaled
+	tc    float64
+	tw    float64
 	logTh float64 // Log so that zero value is correct, Th = 1.
-	tl    unscaled
+	tl    float64
 	tf    Font
 	tfs   float64
-	tm    *matrix.Matrix
-	tlm   *matrix.Matrix
+	tm    *matrix
+	tlm   *matrix
 }
 
-type unscaled float64
+func (t *Text) Tc(v float64) { t.tc = v }
 
-func (t *Text) Tc(v float64) { t.tc = unscaled(v) }
-
-func (t *Text) Tw(v float64) { t.tw = unscaled(v) }
+func (t *Text) Tw(v float64) { t.tw = v }
 
 func (t *Text) Tz(v float64) { t.logTh = math.Log(v / 100) }
 
-func (t *Text) TL(v float64) { t.tl = unscaled(v) }
+func (t *Text) TL(v float64) { t.tl = v }
 
 func (t *Text) Tf(font Font, size float64) {
 	t.tf = font
@@ -46,17 +41,17 @@ func (t *Text) Tf(font Font, size float64) {
 }
 
 func (t *Text) BT() {
-	t.tm = matrix.Identity()
-	t.tlm = matrix.Identity()
+	t.tlm = identity()
+	t.tm = t.tlm
 }
 
 func (t *Text) ET() {
-	t.tm = nil
 	t.tlm = nil
+	t.tm = nil
 }
 
 func (t *Text) Td(tx, ty float64) {
-	m := matrix.Matrix{
+	m := matrix{
 		{1, 0, 0},
 		{0, 1, 0},
 		{tx, ty, 1},
@@ -71,7 +66,7 @@ func (t *Text) TD(tx, ty float64) {
 }
 
 func (t *Text) Tm(a, b, c, d, e, f float64) {
-	t.tlm = &matrix.Matrix{
+	t.tlm = &matrix{
 		{a, b, 0},
 		{c, d, 0},
 		{e, f, 1},
@@ -80,48 +75,63 @@ func (t *Text) Tm(a, b, c, d, e, f float64) {
 }
 
 func (t *Text) Tstar() {
-	t.TD(0, -float64(t.tl))
+	t.TD(0, -t.tl)
 }
 
 type Renderer interface {
 	Render(x, y, w, h float64, font, s string)
 }
 
-func (t *Text) Tj(g Graphics, r Renderer, s string) {
-	var fn string
-	if t.tf != nil {
-		fn = t.tf.Name()
-		s = t.tf.Decode(s)
-	}
-	x, y, w, h := t.textDims(g, s)
+func (t *Text) Tj(ctm *matrix, r Renderer, raw string) {
+	fn := t.tf.Name()
+	s, w0 := t.tf.Decode(raw)
+	x, y, w, h := t.textDims(ctm, s, w0)
 
 	r.Render(x, y, w, h, fn, s)
 }
 
-func (t *Text) TJAdjust(v float64) {
-	tx := -v / 1000 * t.tfs * math.Exp(t.logTh)
-	t.Td(tx, 0)
+// TJDisplace handles that part of a TJ operator when one of the array elements is a glyph displacement.
+func (t *Text) TJDisplace(v float64) {
+	t.displace(-v, 1)
+}
+
+// displace update the text matrix (cursor), but not the text line matrix (representing the beginning of the line),
+// in response to a glyph render or TJ glyph displacement.
+func (t *Text) displace(v float64, nRunes int) {
+	n := float64(nRunes)
+	tx := (v/1000*t.tfs + n*(t.tc+t.tw)) * math.Exp(t.logTh)
+	t.tm = (&matrix{
+		{1, 0, 0},
+		{0, 1, 0},
+		{tx, 0, 1},
+	}).Mul(t.tm)
 }
 
 // See PDF_ISO_32000-2: 9.4.4 Text space details.
-func (t *Text) textDims(g Graphics, s string) (x, y, w, h float64) {
-	m := &matrix.Matrix{
+func (t *Text) textDims(ctm *matrix, s string, w0 float64) (x, y, w, h float64) {
+	var nRunes float64
+	for range s {
+		nRunes++
+	}
+
+	rm := t.trm(ctm)
+	t.displace(w0, int(nRunes))
+
+	x = rm[2][0]
+	y = rm[2][1]
+	w = t.trm(ctm)[2][0] - rm[2][0]
+	h = rm[1][1]
+	return
+}
+
+// trm calculates the text rendering matrix,
+// see PDF_ISO_32000-2: 9.4.4 Text space details.
+func (t *Text) trm(ctm *matrix) *matrix {
+	m := &matrix{
 		{t.tfs * math.Exp(t.logTh), 0, 0},
 		{0, t.tfs, 0},
 		{0, 0, 1},
 	}
-	pre := m.Mul(t.tm).Mul(g.ctm)
 
-	var tx, w0 float64
-	for _, b := range s {
-		w0 += t.tf.Width(int(b))
-	}
-	tx = (w0*t.tfs/1000 + float64(len(s))*float64(t.tc+t.tw)) * math.Exp(t.logTh)
-	t.Td(tx, 0)
-
-	post := m.Mul(t.tm).Mul(g.ctm)
-	w = post[2][0] - pre[2][0]
-
-	return pre[2][0], pre[2][1], w, pre[1][1]
-
+	return m.Mul(t.tm).Mul(ctm)
 }
