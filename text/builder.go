@@ -4,18 +4,23 @@ import (
 	"strings"
 )
 
-// Builder is a string containing rendered-size information for each segment.
+// Builder builds Text
 type Builder struct {
-	y    float64
+	y    float64 // y-location on the page of the last text rendered.
 	text Text
 }
 
+// Add adds the Text content to the buffer, merging text parts if possible.
 func (s *Builder) Add(t Text) {
 	for _, part := range t {
 		s.add(part.Size, part.Weight, part.Content)
 	}
 }
 
+// Render adds the content with the given dimensions and font to the text builder.
+// Text blocks are sectioned into lines and paragraphs based on their relative location
+// on the page.
+// TODO: segment horizontally segmented text blocks.
 func (s *Builder) Render(x, y, w, h float64, font, content string) {
 	if len(content) == 0 {
 		return

@@ -63,8 +63,8 @@ func getWidths(v Value) widths {
 
 		return widths{defaultW: dw, spans: spans}
 	default:
-		// TODO: Support FontMatrix
-		// TODO: Support FontDescriptor.MissingWidth
+		dw := v.Key("FontDescriptor").Key("MissingWidth").Float64()
+
 		ww := v.Key("Widths")
 		s := span{
 			first:  int(v.Key("FirstChar").Int64()),
@@ -75,7 +75,7 @@ func getWidths(v Value) widths {
 			s.linear[i] = ww.Index(i).Float64()
 		}
 
-		return widths{spans: []span{s}}
+		return widths{defaultW: dw, spans: []span{s}}
 	}
 }
 

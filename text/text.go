@@ -6,8 +6,10 @@ import (
 	"unicode"
 )
 
+// Text represents minimally structured text extracted from a PDF.
 type Text []Part
 
+// Part is a part of Text with the same size and font weight.
 type Part struct {
 	Size float64
 	// bitmask of styles, currently just 1 for bold.
@@ -48,6 +50,8 @@ func (t Text) Size() float64 {
 
 	return ms
 }
+
+// TrimSpace trims whitespace from both ends of the Text.
 func (t Text) TrimSpace() Text {
 	l := len(t)
 	if l == 0 {
@@ -71,6 +75,7 @@ func (t Text) TrimSpace() Text {
 	return trimmed
 }
 
+// Split splits the Text by the separator.
 func (s Text) Split(sep string) []Text {
 	var (
 		parts   []Text
