@@ -22,7 +22,6 @@ func (b *Builder) Add(t Text) {
 // Render adds the content with the given dimensions and font to the text builder.
 // Text blocks are sectioned into lines and paragraphs based on their relative location
 // on the page.
-// TODO: segment horizontally segmented text blocks.
 func (b *Builder) Render(x, y, w, h float64, font, content string) {
 	if len(content) == 0 {
 		return
@@ -35,7 +34,8 @@ func (b *Builder) Render(x, y, w, h float64, font, content string) {
 		y < b.y-2*h: // More than 2 lines below previous write.
 		// Next paragraph.
 		ws = newParagraph
-	case y < b.y: // Below previous write.
+	case y < b.y, // Below previous write.
+		x > b.x+5*h: // Potentially new table column.
 		// Next line.
 		ws = newLine
 	case x > b.x+h:
