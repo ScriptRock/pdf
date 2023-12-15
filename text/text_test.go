@@ -14,6 +14,7 @@ func Test_Text_Split(t *testing.T) {
 		"nil string": {},
 		"empty string": {
 			input: Text{{Size: 1, Weight: 1, Content: ""}},
+			want:  []Text{{{Size: 1, Weight: 1, Content: ""}}},
 		},
 		"single size without sep": {
 			input: Text{{Size: 1, Weight: 1, Content: "abc"}},
@@ -59,7 +60,7 @@ func Test_Text_TrimSpace(t *testing.T) {
 	}{
 		"whitespace only": {
 			input: Text{{Size: 1, Weight: 1, Content: " \n\t "}},
-			want:  Text{},
+			want:  nil,
 		},
 		"single piece": {
 			input: Text{{Size: 1, Weight: 1, Content: " a "}},
