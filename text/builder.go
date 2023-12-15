@@ -38,7 +38,7 @@ func (b *Builder) Render(x, y, w, h float64, font, content string) {
 	case y < b.y: // Below previous write.
 		// Next line.
 		ws = newLine
-	case x > b.x+3*h:
+	case x > b.x+h:
 		ws = newWord
 	}
 	b.x = x + w

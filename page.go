@@ -157,6 +157,8 @@ func (p *Page) GetText() (result text.Text, err error) {
 				switch e.Kind() {
 				case StringKind:
 					gState.Tj(&out, e.RawString())
+				case IntegerKind:
+					gState.TJDisplace(float64(e.Int64()))
 				case RealKind:
 					gState.TJDisplace(e.Float64())
 				}

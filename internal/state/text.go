@@ -92,14 +92,13 @@ func (t *Text) Tj(ctm *matrix, r Renderer, raw string) {
 
 // TJDisplace handles that part of a TJ operator when one of the array elements is a glyph displacement.
 func (t *Text) TJDisplace(v float64) {
-	t.displace(-v, 1)
+	t.displace(-v, 0, 0)
 }
 
 // displace update the text matrix (cursor), but not the text line matrix (representing the beginning of the line),
 // in response to a glyph render or TJ glyph displacement.
-func (t *Text) displace(v float64, nRunes int) {
-	n := float64(nRunes)
-	tx := (v/1000*t.tfs + n*(t.tc+t.tw)) * math.Exp(t.logTh)
+func (t *Text) displace(v, nc, nw float64) {
+	tx := (v/1000*t.tfs + nc*t.tc + nw*t.tw) * math.Exp(t.logTh)
 	t.tm = (&matrix{
 		{1, 0, 0},
 		{0, 1, 0},
@@ -109,13 +108,18 @@ func (t *Text) displace(v float64, nRunes int) {
 
 // See PDF_ISO_32000-2: 9.4.4 Text space details.
 func (t *Text) textDims(ctm *matrix, s string, w0 float64) (x, y, w, h float64) {
-	var nRunes float64
-	for range s {
-		nRunes++
+	rm := t.trm(ctm)
+
+	var nc, nw float64
+	for _, r := range s {
+		if r == ' ' {
+			nw++
+		} else {
+			nc++
+		}
 	}
 
-	rm := t.trm(ctm)
-	t.displace(w0, int(nRunes))
+	t.displace(w0, nc, nw)
 
 	x = rm[2][0]
 	y = rm[2][1]
