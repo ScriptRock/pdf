@@ -32,6 +32,9 @@ func (g *Graphics) Pop() {
 }
 
 func (g *Graphics) Tj(r Renderer, raw string) {
+	if g.gState.ctm == nil {
+		g.gState.ctm = identity()
+	}
 	g.gState.Text.Tj(g.gState.ctm, r, raw)
 }
 

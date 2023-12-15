@@ -89,7 +89,7 @@ func (s Text) Split(sep string) []Text {
 				parts = append(parts, current.text)
 				current = Builder{}
 			}
-			current.add(p.Size, p.Weight, line)
+			current.add(p.Size, p.Weight, line, noWhitespace)
 		}
 	}
 

@@ -2,6 +2,7 @@ package text
 
 import (
 	"strings"
+	"unicode"
 )
 
 // Builder builds Text
@@ -14,7 +15,7 @@ type Builder struct {
 // Add adds the Text content to the buffer, merging text parts if possible.
 func (b *Builder) Add(t Text) {
 	for _, part := range t {
-		b.add(part.Size, part.Weight, part.Content)
+		b.add(part.Size, part.Weight, part.Content, noWhitespace)
 	}
 }
 
@@ -27,15 +28,18 @@ func (b *Builder) Render(x, y, w, h float64, font, content string) {
 		return
 	}
 
+	var ws whitespace
 	switch {
 	case len(b.text) == 0:
 	case y > b.y, // Above previous write.
 		y < b.y-2*h: // More than 2 lines below previous write.
 		// Next paragraph.
-		b.append("\n\n")
+		ws = newParagraph
 	case y < b.y: // Below previous write.
 		// Next line.
-		b.append("\n")
+		ws = newLine
+	case x > b.x+3*h:
+		ws = newWord
 	}
 	b.x = x + w
 	b.y = y
@@ -45,27 +49,60 @@ func (b *Builder) Render(x, y, w, h float64, font, content string) {
 		weight = 1
 	}
 
-	b.add(h, weight, content)
+	b.add(h, weight, content, ws)
 }
 
-func (b *Builder) add(size float64, weight int, content string) {
+type whitespace int
+
+const (
+	noWhitespace whitespace = iota
+	newWord
+	newLine
+	newParagraph
+)
+
+func (b *Builder) add(size float64, weight int, content string, w whitespace) {
 	isWhitespace := len(strings.TrimSpace(content)) == 0
 	if l := len(b.text); l > 0 {
 		last := &b.text[l-1]
 		if isWhitespace || (last.Size == size && last.Weight == weight) {
-			b.append(content)
+			b.append(content, w)
 			return
 		}
 	}
 
 	b.text = append(b.text, Part{Size: size, Weight: weight})
-	b.append(content)
+	b.append(content, w)
 }
 
 // The Builder must be non-empty to call append, or else it will panic.
-func (b *Builder) append(s string) {
-	l := len(b.text)
-	b.text[l-1].Content += s
+func (b *Builder) append(s string, w whitespace) {
+	last := &b.text[len(b.text)-1]
+	n := len(last.Content)
+	m := len(s)
+
+	switch w {
+	case noWhitespace:
+	case newWord:
+		switch {
+		case n > 0 && unicode.IsSpace(rune(last.Content[n-1])):
+		case m > 0 && unicode.IsSpace(rune(s[0])):
+		default:
+			last.Content += " "
+		}
+	case newLine:
+		switch {
+		case n > 0 && last.Content[n-1] == '\n':
+		case m > 0 && s[0] == '\n':
+		default:
+			last.Content += "\n"
+		}
+	case newParagraph:
+		last.Content = strings.TrimRightFunc(last.Content, unicode.IsSpace)
+		s = strings.TrimLeftFunc(s, unicode.IsSpace)
+		last.Content += "\n\n"
+	}
+	last.Content += s
 }
 
 func (b Builder) Text() Text { return b.text }
