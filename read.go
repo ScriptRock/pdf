@@ -167,15 +167,16 @@ func (r *Reader) Close() error {
 	return nil
 }
 
-func (r *Reader) trailerValue() Value {
-	return Value{r, r.trailerptr, r.trailer}
+func (r *Reader) trailerValue() value {
+	return value{r: r, ptr: r.trailerptr, data: r.trailer}
 }
 
-func (r *Reader) GetText() ([]text.Text, error) {
+// Text returns an array of structured Texts, one for each page.
+func (r *Reader) Text() ([]text.Text, error) {
 	var tt []text.Text
-	for i := 1; i <= r.NumPage(); i++ {
+	for i := 1; i <= r.NPages(); i++ {
 		p := r.Page(i)
-		t, err := p.GetText()
+		t, err := p.Text()
 		if err != nil {
 			return nil, fmt.Errorf("failed to read page text: %w", err)
 		}
@@ -238,8 +239,8 @@ func readXrefStream(r *Reader, b *buffer) ([]types.Xref, types.Objptr, types.Dic
 			return nil, types.Objptr{}, nil, fmt.Errorf("malformed PDF: xref prev stream not found: %v", objfmt(obj))
 		}
 		prevoff = prevstrm.Hdr["Prev"]
-		prev := Value{r, types.Objptr{}, prevstrm}
-		if prev.Kind() != StreamKind {
+		prev := value{r: r, data: prevstrm}
+		if prev.Kind() != streamKind {
 			return nil, types.Objptr{}, nil, fmt.Errorf("malformed PDF: xref prev stream is not stream: %v", prev)
 		}
 		if prev.Key("Type").Name() != "XRef" {
@@ -282,7 +283,7 @@ func readXrefStreamData(r *Reader, strm types.Stream, table []types.Xref, size i
 		return nil, fmt.Errorf("invalid W array %v", objfmt(ww))
 	}
 
-	v := Value{r, types.Objptr{}, strm}
+	v := value{r: r, data: strm}
 	wtotal := 0
 	for _, wid := range w {
 		wtotal += wid
@@ -432,21 +433,21 @@ func findLastLine(buf []byte, s string) int {
 	}
 }
 
-func (r *Reader) resolve(parent types.Objptr, x interface{}) Value {
+func (r *Reader) resolve(parent types.Objptr, x interface{}) value {
 	if ptr, ok := x.(types.Objptr); ok {
 		if ptr.ID >= uint32(len(r.xref)) {
-			return Value{}
+			return value{}
 		}
 		xref := r.xref[ptr.ID]
 		if xref.Ptr != ptr || !xref.InStream && xref.Offset == 0 {
-			return Value{}
+			return value{}
 		}
 		var obj types.Object
 		if xref.InStream {
 			strm := r.resolve(parent, xref.Stream)
 		Search:
 			for {
-				if strm.Kind() != StreamKind {
+				if strm.Kind() != streamKind {
 					panic("not a stream")
 				}
 				if strm.Key("Type").Name() != "ObjStm" {
@@ -469,7 +470,7 @@ func (r *Reader) resolve(parent types.Objptr, x interface{}) Value {
 					}
 				}
 				ext := strm.Key("Extends")
-				if ext.Kind() != StreamKind {
+				if ext.Kind() != streamKind {
 					panic("cannot find object in stream")
 				}
 				strm = ext
@@ -491,13 +492,16 @@ func (r *Reader) resolve(parent types.Objptr, x interface{}) Value {
 	}
 
 	switch x := x.(type) {
-	case nil, bool, int64, float64, types.Name, types.Dict, types.Array, types.Stream:
-		return Value{r, parent, x}
-	case string:
-		return Value{r, parent, x}
+	case nil, bool, int64, float64, types.Name, types.Dict, types.Array, types.Stream, string:
+		return value{r: r, ptr: parent, data: x}
 	default:
 		panic(fmt.Errorf("unexpected value type %T in resolve", x))
 	}
+}
+
+func (r *Reader) streamReader(s types.Stream, length int64) (io.Reader, error) {
+	rd := io.NewSectionReader(r.f, s.Offset, length)
+	return r.decrypter.Decrypt(s.Ptr, rd)
 }
 
 type errorReadCloser struct {
@@ -515,15 +519,13 @@ func (e *errorReadCloser) Close() error {
 // Reader returns the data contained in the stream v.
 // If v.Kind() != Stream, Reader returns a ReadCloser that
 // responds to all reads with a “stream not present” error.
-func (v Value) Reader() io.ReadCloser {
+func (v value) Reader() io.ReadCloser {
 	x, ok := v.data.(types.Stream)
 	if !ok {
 		return &errorReadCloser{fmt.Errorf("stream not present")}
 	}
-	var rd io.Reader
-	rd = io.NewSectionReader(v.r.f, x.Offset, v.Key("Length").Int64())
-	var err error
-	rd, err = v.r.decrypter.Decrypt(x.Ptr, rd)
+
+	rd, err := v.r.streamReader(x, v.Key("Length").Int64())
 	if err != nil {
 		panic(fmt.Errorf("bad decryption: %w", err))
 	}
@@ -532,11 +534,11 @@ func (v Value) Reader() io.ReadCloser {
 	switch filter.Kind() {
 	default:
 		panic(fmt.Errorf("unsupported filter %v", filter))
-	case NullKind:
+	case nullKind:
 		// ok
-	case NameKind:
+	case nameKind:
 		rd = applyFilter(rd, filter.Name(), param)
-	case ArrayKind:
+	case arrayKind:
 		for i := 0; i < filter.Len(); i++ {
 			rd = applyFilter(rd, filter.Index(i).Name(), param.Index(i))
 		}
@@ -549,7 +551,7 @@ func (v Value) Reader() io.ReadCloser {
 	return io.NopCloser(rd)
 }
 
-func applyFilter(rd io.Reader, name string, param Value) io.Reader {
+func applyFilter(rd io.Reader, name string, param value) io.Reader {
 	switch name {
 	default:
 		panic("unknown filter " + name)
@@ -559,7 +561,7 @@ func applyFilter(rd io.Reader, name string, param Value) io.Reader {
 			panic(err)
 		}
 		pred := param.Key("Predictor")
-		if pred.Kind() == NullKind {
+		if pred.Kind() == nullKind {
 			return zr
 		}
 		columns := param.Key("Columns").Int64()

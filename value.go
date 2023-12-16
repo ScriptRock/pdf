@@ -10,63 +10,63 @@ import (
 	"github.com/njupg/pdf/internal/types"
 )
 
-// A Value is a single PDF value, such as an integer, dictionary, or array.
-// The zero Value is a PDF null (Kind() == Null, IsNull() = true).
-type Value struct {
+// A value is a single PDF value, such as an integer, dictionary, or array.
+// The zero value is a PDF null (Kind() == Null, IsNull() = true).
+type value struct {
 	r    *Reader
 	ptr  types.Objptr
 	data interface{}
 }
 
 // IsNull reports whether the value is a null. It is equivalent to Kind() == Null.
-func (v Value) IsNull() bool {
+func (v value) IsNull() bool {
 	return v.data == nil
 }
 
-// A ValueKind specifies the kind of data underlying a Value.
-type ValueKind int
+// A valueKind specifies the kind of data underlying a Value.
+type valueKind int
 
 // The PDF value kinds.
 const (
-	NullKind ValueKind = iota
-	BoolKind
-	IntegerKind
-	RealKind
-	StringKind
-	NameKind
-	DictKind
-	ArrayKind
-	StreamKind
+	nullKind valueKind = iota
+	boolKind
+	integerKind
+	realKind
+	stringKind
+	nameKind
+	dictKind
+	arrayKind
+	streamKind
 )
 
 // Kind reports the kind of value underlying v.
-func (v Value) Kind() ValueKind {
+func (v value) Kind() valueKind {
 	switch v.data.(type) {
 	default:
-		return NullKind
+		return nullKind
 	case bool:
-		return BoolKind
+		return boolKind
 	case int64:
-		return IntegerKind
+		return integerKind
 	case float64:
-		return RealKind
+		return realKind
 	case string:
-		return StringKind
+		return stringKind
 	case types.Name:
-		return NameKind
+		return nameKind
 	case types.Dict:
-		return DictKind
+		return dictKind
 	case types.Array:
-		return ArrayKind
+		return arrayKind
 	case types.Stream:
-		return StreamKind
+		return streamKind
 	}
 }
 
 // String returns a textual representation of the value v.
 // Note that String is not the accessor for values with Kind() == String.
 // To access such values, see RawString, Text, and TextFromUTF16.
-func (v Value) String() string {
+func (v value) String() string {
 	return objfmt(v.data)
 }
 
@@ -130,7 +130,7 @@ func objfmt(x interface{}) string {
 
 // Bool returns v's boolean value.
 // If v.Kind() != Bool, Bool returns false.
-func (v Value) Bool() bool {
+func (v value) Bool() bool {
 	x, ok := v.data.(bool)
 	if !ok {
 		return false
@@ -140,7 +140,7 @@ func (v Value) Bool() bool {
 
 // Int64 returns v's int64 value.
 // If v.Kind() != Int64, Int64 returns 0.
-func (v Value) Int64() int64 {
+func (v value) Int64() int64 {
 	x, ok := v.data.(int64)
 	if !ok {
 		return 0
@@ -150,7 +150,7 @@ func (v Value) Int64() int64 {
 
 // Float64 returns v's float64 value, converting from integer if necessary.
 // If v.Kind() != Float64 and v.Kind() != Int64, Float64 returns 0.
-func (v Value) Float64() float64 {
+func (v value) Float64() float64 {
 	x, ok := v.data.(float64)
 	if !ok {
 		x, ok := v.data.(int64)
@@ -164,7 +164,7 @@ func (v Value) Float64() float64 {
 
 // RawString returns v's string value.
 // If v.Kind() != String, RawString returns the empty string.
-func (v Value) RawString() string {
+func (v value) RawString() string {
 	x, ok := v.data.(string)
 	if !ok {
 		return ""
@@ -175,7 +175,7 @@ func (v Value) RawString() string {
 // Text returns v's string value interpreted as a “text string” (defined in the PDF spec)
 // and converted to UTF-8.
 // If v.Kind() != String, Text returns the empty string.
-func (v Value) Text() string {
+func (v value) Text() string {
 	x, ok := v.data.(string)
 	if !ok {
 		return ""
@@ -193,7 +193,7 @@ func (v Value) Text() string {
 // and then converted to UTF-8.
 // If v.Kind() != String or if the data is not valid UTF-16, TextFromUTF16 returns
 // the empty string.
-func (v Value) TextFromUTF16() string {
+func (v value) TextFromUTF16() string {
 	x, ok := v.data.(string)
 	if !ok {
 		return ""
@@ -212,7 +212,7 @@ func (v Value) TextFromUTF16() string {
 // The returned name does not include the leading slash:
 // if v corresponds to the name written using the syntax /Helvetica,
 // Name() == "Helvetica".
-func (v Value) Name() string {
+func (v value) Name() string {
 	x, ok := v.data.(types.Name)
 	if !ok {
 		return ""
@@ -224,12 +224,12 @@ func (v Value) Name() string {
 // Like the result of the Name method, the key should not include a leading slash.
 // If v is a stream, Key applies to the stream's header dictionary.
 // If v.Kind() != Dict and v.Kind() != Stream, Key returns a null Value.
-func (v Value) Key(key string) Value {
+func (v value) Key(key string) value {
 	x, ok := v.data.(types.Dict)
 	if !ok {
 		strm, ok := v.data.(types.Stream)
 		if !ok {
-			return Value{}
+			return value{}
 		}
 		x = strm.Hdr
 	}
@@ -239,7 +239,7 @@ func (v Value) Key(key string) Value {
 // Keys returns a sorted list of the keys in the dictionary v.
 // If v is a stream, Keys applies to the stream's header dictionary.
 // If v.Kind() != Dict and v.Kind() != Stream, Keys returns nil.
-func (v Value) Keys() []string {
+func (v value) Keys() []string {
 	x, ok := v.data.(types.Dict)
 	if !ok {
 		strm, ok := v.data.(types.Stream)
@@ -259,17 +259,17 @@ func (v Value) Keys() []string {
 // Index returns the i'th element in the array v.
 // If v.Kind() != Array or if i is outside the array bounds,
 // Index returns a null Value.
-func (v Value) Index(i int) Value {
+func (v value) Index(i int) value {
 	x, ok := v.data.(types.Array)
 	if !ok || i < 0 || i >= len(x) {
-		return Value{}
+		return value{}
 	}
 	return v.r.resolve(v.ptr, x[i])
 }
 
 // Len returns the length of the array v.
 // If v.Kind() != Array, Len returns 0.
-func (v Value) Len() int {
+func (v value) Len() int {
 	x, ok := v.data.(types.Array)
 	if !ok {
 		return 0
@@ -280,10 +280,10 @@ func (v Value) Len() int {
 // RawElements returns the elements in the array.
 // If v.Kind() != Array, RawElements returns nil.
 // RawElements only returns values with kinds matching those given.
-func (v Value) RawElements(kinds ...ValueKind) []any {
+func (v value) RawElements(kinds ...valueKind) []any {
 	var ee []any
 
-	kk := map[ValueKind]bool{}
+	kk := map[valueKind]bool{}
 	for _, k := range kinds {
 		kk[k] = true
 	}
@@ -295,15 +295,15 @@ func (v Value) RawElements(kinds ...ValueKind) []any {
 		}
 
 		switch e.Kind() {
-		case BoolKind:
+		case boolKind:
 			ee = append(ee, e.Bool())
-		case IntegerKind:
+		case integerKind:
 			ee = append(ee, e.Int64())
-		case RealKind:
+		case realKind:
 			ee = append(ee, e.Float64())
-		case StringKind:
+		case stringKind:
 			ee = append(ee, e.RawString())
-		case NameKind:
+		case nameKind:
 			ee = append(ee, e.Name())
 		}
 	}

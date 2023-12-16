@@ -13,10 +13,10 @@ import (
 	"github.com/njupg/pdf/text"
 )
 
-// A Page represent a single page in a PDF file.
+// A Page represent a single Page in a PDF file.
 // The methods interpret a Page dictionary stored in V.
 type Page struct {
-	V Value
+	v value
 }
 
 // Page returns the page for the given page number.
@@ -54,36 +54,37 @@ Search:
 	return Page{}
 }
 
-// NumPage returns the number of pages in the PDF file.
-func (r *Reader) NumPage() int {
+// NPages returns the number of pages in the PDF file.
+func (r *Reader) NPages() int {
 	return int(r.trailerValue().Key("Root").Key("Pages").Key("Count").Int64())
 }
 
-func (p Page) findInherited(key string) Value {
-	for v := p.V; !v.IsNull(); v = v.Key("Parent") {
+func (p Page) findInherited(key string) value {
+	for v := p.v; !v.IsNull(); v = v.Key("Parent") {
 		if r := v.Key(key); !r.IsNull() {
 			return r
 		}
 	}
-	return Value{}
+	return value{}
 }
 
-// Resources returns the resources dictionary associated with the page.
-func (p Page) Resources() Value {
+// resources returns the resources dictionary associated with the page.
+func (p Page) resources() value {
 	return p.findInherited("Resources")
 }
 
-// Fonts returns a list of the fonts associated with the page.
-func (p Page) Fonts() []string {
-	return p.Resources().Key("Font").Keys()
+// fonts returns a list of the fonts associated with the page.
+func (p Page) fonts() []string {
+	return p.resources().Key("Font").Keys()
 }
 
-// Font returns the font with the given name associated with the page.
-func (p Page) Font(name string) *Font {
-	return NewFont(p.Resources().Key("Font").Key(name))
+// font returns the font with the given name associated with the page.
+func (p Page) font(name string) *font {
+	return newFont(p.resources().Key("Font").Key(name))
 }
 
-func (p *Page) GetText() (result text.Text, err error) {
+// Text returns the structured text on the page.
+func (p *Page) Text() (result text.Text, err error) {
 	// TODO: return errors everywhere.
 	defer func() {
 		if r := recover(); r != nil {
@@ -92,9 +93,9 @@ func (p *Page) GetText() (result text.Text, err error) {
 		}
 	}()
 
-	decoders := make(map[string]*Font)
-	for _, f := range p.Fonts() {
-		decoders[f] = p.Font(f)
+	decoders := make(map[string]*font)
+	for _, f := range p.fonts() {
+		decoders[f] = p.font(f)
 	}
 
 	var (
@@ -102,9 +103,9 @@ func (p *Page) GetText() (result text.Text, err error) {
 		gState state.Graphics
 	)
 
-	forEachStream(p, func(stk *Stack, op string) {
+	forEachStream(p, func(stk *stack, op string) {
 		n := stk.Len()
-		args := make([]Value, n)
+		args := make([]value, n)
 		for i := n - 1; i >= 0; i-- {
 			args[i] = stk.Pop()
 		}
@@ -155,11 +156,11 @@ func (p *Page) GetText() (result text.Text, err error) {
 			for i := 0; i < arr.Len(); i++ {
 				e := arr.Index(i)
 				switch e.Kind() {
-				case StringKind:
+				case stringKind:
 					gState.Tj(&out, e.RawString())
-				case IntegerKind:
+				case integerKind:
 					gState.TJDisplace(float64(e.Int64()))
-				case RealKind:
+				case realKind:
 					gState.TJDisplace(e.Float64())
 				}
 			}
@@ -171,21 +172,21 @@ func (p *Page) GetText() (result text.Text, err error) {
 
 // forEachStream interprets each stream in the reader as a PostScript stream,
 // running `do` against every PostScript operation.
-func forEachStream(p *Page, do func(stk *Stack, op string)) {
-	v := p.V.Key("Contents")
-	if v.Kind() == StreamKind {
-		Interpret(v.Reader(), do)
+func forEachStream(p *Page, do func(stk *stack, op string)) {
+	v := p.v.Key("Contents")
+	if v.Kind() == streamKind {
+		interpret(v.Reader(), do)
 		return
 	}
 
 	var rr []io.Reader
 	for i := 0; i < v.Len(); i++ {
 		v := v.Index(i)
-		if v.Kind() == StreamKind {
+		if v.Kind() == streamKind {
 			rr = append(rr, v.Reader())
 		}
 	}
 
-	Interpret(io.MultiReader(rr...), do)
+	interpret(io.MultiReader(rr...), do)
 
 }

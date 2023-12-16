@@ -10,53 +10,53 @@ import (
 	"github.com/njupg/pdf/internal/types"
 )
 
-// A Stack represents a stack of values.
-type Stack struct {
-	stack []Value
+// A stack represents a stack of values.
+type stack struct {
+	stack []value
 }
 
-func (stk *Stack) Len() int {
+func (stk *stack) Len() int {
 	return len(stk.stack)
 }
 
-func (stk *Stack) Push(v Value) {
+func (stk *stack) Push(v value) {
 	stk.stack = append(stk.stack, v)
 }
 
-func (stk *Stack) Pop() Value {
+func (stk *stack) Pop() value {
 	n := len(stk.stack)
 	if n == 0 {
-		return Value{}
+		return value{}
 	}
 	v := stk.stack[n-1]
-	stk.stack[n-1] = Value{}
+	stk.stack[n-1] = value{}
 	stk.stack = stk.stack[:n-1]
 	return v
 }
 
-func newDict() Value {
-	return Value{nil, types.Objptr{}, make(types.Dict)}
+func newDict() value {
+	return value{data: make(types.Dict)}
 }
 
-// Interpret interprets the content in a stream as a basic PostScript program,
+// interpret interprets the content in a stream as a basic PostScript program,
 // pushing values onto a stack and then calling the do function to execute
 // operators. The do function may push or pop values from the stack as needed
 // to implement op.
 //
-// Interpret handles the operators "dict", "currentdict", "begin", "end", "def", and "pop" itself.
+// interpret handles the operators "dict", "currentdict", "begin", "end", "def", and "pop" itself.
 //
-// Interpret is not a full-blown PostScript interpreter. Its job is to handle the
+// interpret is not a full-blown PostScript interpreter. Its job is to handle the
 // very limited PostScript found in certain supporting file formats embedded
 // in PDF files, such as cmap files that describe the mapping from font code
 // points to Unicode code points.
 //
 // There is no support for executable blocks, among other limitations.
-func Interpret(rd io.Reader, do func(stk *Stack, op string)) {
+func interpret(rd io.Reader, do func(stk *stack, op string)) {
 	b := newBuffer(rd, 0)
 	b.allowEOF = true
 	b.allowObjptr = false
 	b.allowStream = false
-	var stk Stack
+	var stk stack
 	var dicts []types.Dict
 Reading:
 	for {
@@ -69,7 +69,7 @@ Reading:
 			default:
 				for i := len(dicts) - 1; i >= 0; i-- {
 					if v, ok := dicts[i][types.Name(kw)]; ok {
-						stk.Push(Value{nil, types.Objptr{}, v})
+						stk.Push(value{data: v})
 						continue Reading
 					}
 				}
@@ -79,17 +79,17 @@ Reading:
 				break
 			case "dict":
 				stk.Pop()
-				stk.Push(Value{nil, types.Objptr{}, make(types.Dict)})
+				stk.Push(value{data: make(types.Dict)})
 				continue
 			case "currentdict":
 				if len(dicts) == 0 {
 					panic("no current dictionary")
 				}
-				stk.Push(Value{nil, types.Objptr{}, dicts[len(dicts)-1]})
+				stk.Push(value{data: dicts[len(dicts)-1]})
 				continue
 			case "begin":
 				d := stk.Pop()
-				if d.Kind() != DictKind {
+				if d.Kind() != dictKind {
 					panic("cannot begin non-dict")
 				}
 				dicts = append(dicts, d.data.(types.Dict))
@@ -118,6 +118,6 @@ Reading:
 		}
 		b.unreadToken(tok)
 		obj := b.readObject()
-		stk.Push(Value{nil, types.Objptr{}, obj})
+		stk.Push(value{data: obj})
 	}
 }

@@ -6,24 +6,24 @@ import (
 	"github.com/njupg/pdf/internal/encoding"
 )
 
-func NewFont(v Value) *Font {
-	return &Font{
+func newFont(v value) *font {
+	return &font{
 		name:    v.Key("BaseFont").Name(),
-		Decoder: getDecoder(v),
+		decoder: getDecoder(v),
 	}
 }
 
-// A Font represent a font in a PDF file.
-// The methods interpret a Font dictionary stored in V.
-type Font struct {
-	Decoder
+// A font represent a font in a PDF file.
+// The methods interpret a font dictionary stored in V.
+type font struct {
+	decoder
 	name string
 }
 
 // BaseFont returns the font's name (BaseFont property).
-func (f Font) Name() string { return f.name }
+func (f font) Name() string { return f.name }
 
-func getWidths(v Value) widths {
+func getWidths(v value) widths {
 	switch v.Key("Subtype").String() {
 	case "/Type0":
 		return getWidths(v.Key("DescendantFonts").Index(0))
@@ -39,11 +39,11 @@ func getWidths(v Value) widths {
 				first: int(ww.Index(i - 1).Int64()),
 			}
 			switch ww.Index(i).Kind() {
-			case IntegerKind:
+			case integerKind:
 				span.last = int(ww.Index(i).Int64())
 				span.fixed = ww.Index(i + 1).Float64()
 				i += 3
-			case ArrayKind:
+			case arrayKind:
 				values := ww.Index(i)
 				span.last = span.first + values.Len() - 1
 				span.linear = make([]float64, values.Len())
@@ -75,12 +75,12 @@ func getWidths(v Value) widths {
 	}
 }
 
-func getDecoder(v Value) Decoder {
+func getDecoder(v value) decoder {
 	widths := getWidths(v)
 
 	enc := v.Key("Encoding")
 	switch enc.Kind() {
-	case NameKind:
+	case nameKind:
 		switch enc.Name() {
 		case "WinAnsiEncoding":
 			return encoding.WinANSI(widths)
@@ -90,23 +90,23 @@ func getDecoder(v Value) Decoder {
 			return charmapEncoding(v, widths)
 		default:
 		}
-	case NullKind:
+	case nullKind:
 		return charmapEncoding(v, widths)
 	}
 
 	panic("unsupported encoding: " + v.String())
 }
 
-func charmapEncoding(v Value, widths widths) Decoder {
+func charmapEncoding(v value, widths widths) decoder {
 	toUnicode := v.Key("ToUnicode")
-	if toUnicode.Kind() != StreamKind {
+	if toUnicode.Kind() != streamKind {
 		return encoding.PDFDoc(widths)
 	}
 
 	n := -1
 	m := encoding.CMap{Widths: widths}
 	ok := true
-	Interpret(toUnicode.Reader(), func(stk *Stack, op string) {
+	interpret(toUnicode.Reader(), func(stk *stack, op string) {
 		if !ok {
 			return
 		}
@@ -157,10 +157,10 @@ func charmapEncoding(v Value, widths widths) Decoder {
 				dst, srcHi, srcLo := stk.Pop(), stk.Pop().RawString(), stk.Pop().RawString()
 				bfr := encoding.BFRange{Lo: srcLo, Hi: srcHi}
 				switch dst.Kind() {
-				case StringKind:
+				case stringKind:
 					bfr.DstS = dst.RawString()
-				case ArrayKind:
-					bfr.DstA = dst.RawElements(StringKind)
+				case arrayKind:
+					bfr.DstA = dst.RawElements(stringKind)
 				}
 				m.BFRanges = append(m.BFRanges, bfr)
 			}
