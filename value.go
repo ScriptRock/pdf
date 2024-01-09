@@ -15,7 +15,7 @@ import (
 type value struct {
 	r    *Reader
 	ptr  types.Objptr
-	data interface{}
+	data any
 }
 
 // IsNull reports whether the value is a null. It is equivalent to Kind() == Null.
@@ -70,7 +70,7 @@ func (v value) String() string {
 	return objfmt(v.data)
 }
 
-func objfmt(x interface{}) string {
+func objfmt(x any) string {
 	switch x := x.(type) {
 	default:
 		return fmt.Sprint(x)

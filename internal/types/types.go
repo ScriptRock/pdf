@@ -17,7 +17,7 @@ type Name string
 //	objdef, a PDF object definition
 //
 // An object may also be nil, to represent the PDF null.
-type Object interface{}
+type Object any
 
 type Dict map[Name]Object
 

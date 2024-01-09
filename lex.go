@@ -24,7 +24,7 @@ import (
 //	string, a PDF string literal
 //	keyword, a PDF keyword
 //	name, a PDF name without the leading slash
-type token interface{}
+type token any
 
 // A keyword is a PDF keyword.
 // Delimiter tokens used in higher-level syntax,
@@ -70,7 +70,7 @@ func (b *buffer) readByte() byte {
 	return c
 }
 
-func (b *buffer) errorf(format string, args ...interface{}) {
+func (b *buffer) errorf(format string, args ...any) {
 	panic(fmt.Errorf(format, args...))
 }
 

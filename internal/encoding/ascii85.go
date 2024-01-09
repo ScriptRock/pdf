@@ -2,28 +2,18 @@
 // later if new decoders is going to add it reasonable to rename file and add them here
 // also create interfaces to switch between them (like in unidoc)
 
-package pdf
+package encoding
 
 import (
 	"io"
 )
 
-type alphaReader struct {
-	reader io.Reader
-}
-
-func newAlphaReader(reader io.Reader) *alphaReader {
+func NewAlphaReader(reader io.Reader) *alphaReader {
 	return &alphaReader{reader: reader}
 }
 
-func checkASCII85(r byte) byte {
-	if r >= '!' && r <= 'u' { // 33 <= ascii85 <=117
-		return r
-	}
-	if r == '~' {
-		return 1 // for marking possible end of data
-	}
-	return 0 // if non-ascii85
+type alphaReader struct {
+	reader io.Reader
 }
 
 func (a *alphaReader) Read(p []byte) (int, error) {
@@ -48,4 +38,15 @@ func (a *alphaReader) Read(p []byte) (int, error) {
 
 	copy(p, buf)
 	return n, nil
+}
+
+func checkASCII85(r byte) byte {
+	switch {
+	case r == '~': // for marking possible end of data
+		return 1
+	case r >= '!' && r <= 'u': // 33 <= ascii85 <=117
+		return r
+	default:
+		return 0 // if non-ascii85
+	}
 }

@@ -58,6 +58,7 @@ import (
 	"os"
 
 	"github.com/njupg/pdf/internal/decrypter"
+	"github.com/njupg/pdf/internal/encoding"
 	"github.com/njupg/pdf/internal/types"
 	"github.com/njupg/pdf/text"
 )
@@ -433,7 +434,7 @@ func findLastLine(buf []byte, s string) int {
 	}
 }
 
-func (r *Reader) resolve(parent types.Objptr, x interface{}) value {
+func (r *Reader) resolve(parent types.Objptr, x any) value {
 	if ptr, ok := x.(types.Objptr); ok {
 		if ptr.ID >= uint32(len(r.xref)) {
 			return value{}
@@ -573,7 +574,7 @@ func applyFilter(rd io.Reader, name string, param value) io.Reader {
 			return &pngUpReader{r: zr, hist: make([]byte, 1+columns), tmp: make([]byte, 1+columns)}
 		}
 	case "ASCII85Decode":
-		cleanASCII85 := newAlphaReader(rd)
+		cleanASCII85 := encoding.NewAlphaReader(rd)
 		decoder := ascii85.NewDecoder(cleanASCII85)
 
 		switch param.Keys() {
