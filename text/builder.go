@@ -19,6 +19,13 @@ func (b *Builder) Add(t Text) {
 	}
 }
 
+func (b *Builder) WriteNewline() {
+	if len(b.text) == 0 {
+		return
+	}
+	b.append("", newLine)
+}
+
 // Render adds the content with the given dimensions and font to the text builder.
 // Text blocks are sectioned into lines and paragraphs based on their relative location
 // on the page.
@@ -30,12 +37,13 @@ func (b *Builder) Render(x, y, w, h float64, font, content string) {
 	var ws whitespace
 	switch {
 	case len(b.text) == 0:
-	case y > b.y, // Above previous write.
+	case y > b.y+0.9*h, // Significantly above previous write.
 		y < b.y-2*h: // More than 2 lines below previous write.
 		// Next paragraph.
 		ws = newParagraph
-	case y < b.y, // Below previous write.
-		x > b.x+5*h: // Potentially new table column.
+		// fmt.Println(b.y, y, h, content)
+	case y < b.y-0.9*h, // Significantly below previous write.
+		x > b.x+3*h: // Potentially new table column.
 		// Next line.
 		ws = newLine
 	case x > b.x+h:
