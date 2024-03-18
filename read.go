@@ -173,18 +173,21 @@ func (r *Reader) trailerValue() value {
 }
 
 // Text returns an array of structured Texts, one for each page.
-func (r *Reader) Text() ([]text.Text, error) {
-	var tt []text.Text
+func (r *Reader) Text() (text.Text, error) {
+	var b text.Builder
 	for i := 1; i <= r.NPages(); i++ {
+		if i > 1 {
+			b.WriteNewline()
+		}
 		p := r.Page(i)
 		t, err := p.Text()
 		if err != nil {
 			return nil, fmt.Errorf("failed to read page text: %w", err)
 		}
-		tt = append(tt, t)
+		b.Add(t)
 	}
 
-	return tt, nil
+	return b.Text(), nil
 }
 
 func readXref(r *Reader, b *buffer) ([]types.Xref, types.Objptr, types.Dict, error) {
