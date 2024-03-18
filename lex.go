@@ -12,8 +12,8 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/njupg/pdf/internal/decrypter"
-	"github.com/njupg/pdf/internal/types"
+	"github.com/ScriptRock/pdf/internal/decrypter"
+	"github.com/ScriptRock/pdf/internal/types"
 )
 
 // A token is a PDF token in the input stream, one of the following Go types:

@@ -6,8 +6,8 @@ import (
 	"sort"
 	"strconv"
 
-	"github.com/njupg/pdf/internal/encoding"
-	"github.com/njupg/pdf/internal/types"
+	"github.com/ScriptRock/pdf/internal/encoding"
+	"github.com/ScriptRock/pdf/internal/types"
 )
 
 // A value is a single PDF value, such as an integer, dictionary, or array.

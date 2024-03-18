@@ -3,7 +3,7 @@ package pdf
 import (
 	"log/slog"
 
-	"github.com/njupg/pdf/internal/encoding"
+	"github.com/ScriptRock/pdf/internal/encoding"
 )
 
 func newFont(v value) *font {

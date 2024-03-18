@@ -57,10 +57,10 @@ import (
 	"log/slog"
 	"os"
 
-	"github.com/njupg/pdf/internal/decrypter"
-	"github.com/njupg/pdf/internal/encoding"
-	"github.com/njupg/pdf/internal/types"
-	"github.com/njupg/pdf/text"
+	"github.com/ScriptRock/pdf/internal/decrypter"
+	"github.com/ScriptRock/pdf/internal/encoding"
+	"github.com/ScriptRock/pdf/internal/types"
+	"github.com/ScriptRock/pdf/text"
 )
 
 // A Reader is a single PDF file open for reading.

@@ -9,8 +9,8 @@ import (
 	"io"
 	"runtime/debug"
 
-	"github.com/njupg/pdf/internal/state"
-	"github.com/njupg/pdf/text"
+	"github.com/ScriptRock/pdf/internal/state"
+	"github.com/ScriptRock/pdf/text"
 )
 
 // A Page represent a single Page in a PDF file.

@@ -12,7 +12,7 @@ import (
 	"fmt"
 	"io"
 
-	"github.com/njupg/pdf/internal/types"
+	"github.com/ScriptRock/pdf/internal/types"
 )
 
 func New(password string, encrypt types.Dict, id string) (*Decrypter, error) {

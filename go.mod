@@ -1,4 +1,4 @@
-module github.com/njupg/pdf
+module github.com/ScriptRock/pdf
 
 go 1.21.2
 

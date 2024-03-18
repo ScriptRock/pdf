@@ -7,7 +7,7 @@ package pdf
 import (
 	"io"
 
-	"github.com/njupg/pdf/internal/types"
+	"github.com/ScriptRock/pdf/internal/types"
 )
 
 // A stack represents a stack of values.
