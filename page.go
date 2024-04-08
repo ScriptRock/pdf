@@ -21,18 +21,18 @@ type Page struct {
 
 // Page returns the page for the given page number.
 // Page numbers are indexed starting at 1, not 0.
-// If the page is not found, Page returns a Page with p.V.IsNull().
-func (r *Reader) Page(num int) Page {
-	num-- // now 0-indexed
+// If the page is not found, Page returns an error.
+func (r *Reader) Page(i int) (text.Text, error) {
+	num := i - 1 // now 0-indexed
 	page := r.trailerValue().Key("Root").Key("Pages")
 Search:
 	for page.Key("Type").Name() == "Pages" {
 		count := int(page.Key("Count").Int64())
 		if count < num {
-			return Page{}
+			break
 		}
 		kids := page.Key("Kids")
-		for i := 0; i < kids.Len(); i++ {
+		for i := range kids.Len() {
 			kid := kids.Index(i)
 			if kid.Key("Type").Name() == "Pages" {
 				c := int(kid.Key("Count").Int64())
@@ -45,13 +45,15 @@ Search:
 			}
 			if kid.Key("Type").Name() == "Page" {
 				if num == 0 {
-					return Page{kid}
+					p := Page{kid}
+					return p.Text()
 				}
 				num--
 			}
 		}
 	}
-	return Page{}
+
+	return nil, fmt.Errorf("page %d not found", i)
 }
 
 // NPages returns the number of pages in the PDF file.

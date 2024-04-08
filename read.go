@@ -172,15 +172,14 @@ func (r *Reader) trailerValue() value {
 	return value{r: r, ptr: r.trailerptr, data: r.trailer}
 }
 
-// Text returns an array of structured Texts, one for each page.
+// Text returns a structured Text for all pages of the pdf.
 func (r *Reader) Text() (text.Text, error) {
 	var b text.Builder
-	for i := 1; i <= r.NPages(); i++ {
-		if i > 1 {
+	for i := range r.NPages() {
+		if i > 0 {
 			b.WriteNewline()
 		}
-		p := r.Page(i)
-		t, err := p.Text()
+		t, err := r.Page(i + 1)
 		if err != nil {
 			return nil, fmt.Errorf("failed to read page text: %w", err)
 		}
