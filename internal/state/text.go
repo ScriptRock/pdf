@@ -121,10 +121,25 @@ func (t *Text) textDims(ctm *matrix, s string, w0 float64) (x, y, w, h float64) 
 
 	t.displace(w0, nc, nw)
 
-	x = rm[2][0]
-	y = rm[2][1]
-	w = t.trm(ctm)[2][0] - rm[2][0]
-	h = rm[1][1]
+	trm := t.trm(ctm)
+
+	// Scale in x and y before write: these are diagonal elements of rm*rm^T.
+	sx := math.Sqrt(rm[0][0]*rm[0][0] + rm[0][1]*rm[0][1])
+	sy := math.Sqrt(rm[1][1]*rm[1][1] + rm[1][0]*rm[1][0])
+	// Scale in x and y after write.
+	tmsx := math.Sqrt(trm[0][0]*trm[0][0] + trm[0][1]*trm[0][1])
+	tmsy := math.Sqrt(trm[1][1]*trm[1][1] + trm[1][0]*trm[1][0])
+
+	// Calc pre-write translation: these are rm^-1 * the translation vector.
+	x = rm[0][0]/sx*rm[2][0] + rm[0][1]/sy*rm[2][1]
+	y = rm[1][0]/sy*rm[2][0] + rm[1][1]/sy*rm[2][1]
+	// Calc post-write x-translation.
+	xp := trm[0][0]/tmsx*trm[2][0] + trm[0][1]/tmsy*trm[2][1]
+	// Width is cursor post-write - cursor pre-write.
+	w = xp - x
+	// Height is vertical scale.
+	h = sy
+
 	return
 }
 
