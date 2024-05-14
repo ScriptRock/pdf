@@ -3845,6 +3845,7 @@ var nameToRune = map[string]rune{
 	"bracerightbt":                        0xF8FE,
 	"apple":                               0xF8FF,
 	"ff":                                  0xFB00,
+	"f_f":                                 0xFB00,
 	"fi":                                  0xFB01,
 	"fl":                                  0xFB02,
 	"ffi":                                 0xFB03,

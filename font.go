@@ -75,30 +75,62 @@ func getWidths(v value) widths {
 	}
 }
 
+// See Table 112: Entries in an encoding dictionary.
+func getDifferences(v value) map[byte]string {
+	dd := map[byte]string{}
+	diffs := v.Key("Differences")
+
+	var c int = -1
+	for i := range diffs.Len() {
+		switch e := diffs.Index(i); e.Kind() {
+		case integerKind:
+			c = int(e.Int64())
+		case nameKind:
+			if c < 0 || c > 255 {
+				panic("bad differences array:" + v.String())
+			}
+			dd[byte(c)] = e.String()[1:]
+			c++
+		default:
+			panic("bad differences array:" + v.String())
+		}
+	}
+
+	return dd
+}
+
 func getDecoder(v value) decoder {
 	widths := getWidths(v)
 
-	enc := v.Key("Encoding")
-	switch enc.Kind() {
+	switch enc := v.Key("Encoding"); enc.Kind() {
 	case nameKind:
 		switch enc.Name() {
 		case "WinAnsiEncoding":
-			return encoding.WinANSI(widths)
+			return encoding.WinANSI(widths, nil)
 		case "MacRomanEncoding":
-			return encoding.MacRoman(widths)
+			return encoding.MacRoman(widths, nil)
+		}
+	case dictKind:
+		// See 9.6.5 Character encoding.
+		diffs := getDifferences(enc)
+		switch enc.Key("BaseEncoding").Name() {
+		case "WinAnsiEncoding":
+			return encoding.WinANSI(widths, diffs)
+		case "MacRomanEncoding":
+			return encoding.MacRoman(widths, diffs)
 		case "Identity-H":
 			return charmapEncoding(v, widths)
-		default:
 		}
-	case nullKind:
-		return charmapEncoding(v, widths)
+	}
+
+	if toUnicode := v.Key("ToUnicode"); !toUnicode.IsNull() {
+		return charmapEncoding(toUnicode, widths)
 	}
 
 	panic("unsupported encoding: " + v.String())
 }
 
-func charmapEncoding(v value, widths widths) decoder {
-	toUnicode := v.Key("ToUnicode")
+func charmapEncoding(toUnicode value, widths widths) decoder {
 	if toUnicode.Kind() != streamKind {
 		return encoding.PDFDoc(widths)
 	}
@@ -174,7 +206,7 @@ func charmapEncoding(v value, widths widths) decoder {
 		}
 	})
 	if !ok {
-		panic("unsupported encoding: " + v.String())
+		panic("bad ToUnicode stream: " + toUnicode.String())
 	}
 	return &m
 }

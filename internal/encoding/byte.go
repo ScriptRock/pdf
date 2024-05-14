@@ -1,26 +1,43 @@
 package encoding
 
-import "unicode"
+import (
+	"strings"
+	"unicode"
+)
 
 type Byte struct {
-	table  *[256]rune
-	widths Sizer
+	table       *[256]rune
+	widths      Sizer
+	differences map[byte]string
 }
 
 func (e *Byte) Decode(raw string) (string, float64) {
 	var w float64
-	r := make([]rune, 0, len(raw))
+
+	var b strings.Builder
 	for i := 0; i < len(raw); i++ {
 		code := raw[i]
-		r = append(r, e.table[code])
+		val := e.table[code]
+		if name, ok := e.differences[code]; ok {
+			if v, ok := nameToRune[name]; ok {
+				val = v
+			}
+		}
+		b.WriteRune(val)
 		w += e.widths.CodeWidth(int(code))
 	}
-	return string(r), w
+	return b.String(), w
 }
 
-func WinANSI(s Sizer) *Byte  { return &Byte{table: &winAnsiEncoding, widths: s} }
-func MacRoman(s Sizer) *Byte { return &Byte{table: &macRomanEncoding, widths: s} }
-func PDFDoc(s Sizer) *Byte   { return &Byte{table: &pdfDocEncoding, widths: s} }
+func WinANSI(s Sizer, d map[byte]string) *Byte {
+	return &Byte{table: &winAnsiEncoding, widths: s, differences: d}
+}
+
+func MacRoman(s Sizer, d map[byte]string) *Byte {
+	return &Byte{table: &macRomanEncoding, widths: s, differences: d}
+}
+
+func PDFDoc(s Sizer) *Byte { return &Byte{table: &pdfDocEncoding, widths: s} }
 
 const NoRune = unicode.ReplacementChar
 

@@ -30,8 +30,11 @@ type CMap struct {
 }
 
 func (m *CMap) Decode(raw string) (string, float64) {
-	var w float64
-	var r strings.Builder
+	var (
+		w float64
+		r strings.Builder
+	)
+
 Parse:
 	for len(raw) > 0 {
 		var code int
@@ -83,5 +86,6 @@ Parse:
 		r.WriteRune(NoRune)
 		raw = raw[1:]
 	}
+
 	return r.String(), w
 }
