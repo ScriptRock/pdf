@@ -23,32 +23,35 @@ type Page struct {
 // Page numbers are indexed starting at 1, not 0.
 // If the page is not found, Page returns an error.
 func (r *Reader) Page(i int) (text.Text, error) {
-	num := i - 1 // now 0-indexed
+	if n := r.NPages(); i < 1 || i > n {
+		return nil, fmt.Errorf("page %d out of range: [1, %d]", i, n)
+	}
+
+	n := i - 1 // 0-indexed
 	page := r.trailerValue().Key("Root").Key("Pages")
 Search:
 	for page.Key("Type").Name() == "Pages" {
 		count := int(page.Key("Count").Int64())
-		if count < num {
+		if count < n {
 			break
 		}
+
 		kids := page.Key("Kids")
-		for i := range kids.Len() {
-			kid := kids.Index(i)
-			if kid.Key("Type").Name() == "Pages" {
+		for j := range kids.Len() {
+			switch kid := kids.Index(j); kid.Key("Type").Name() {
+			case "Pages":
 				c := int(kid.Key("Count").Int64())
-				if num < c {
+				if n < c {
 					page = kid
 					continue Search
 				}
-				num -= c
-				continue
-			}
-			if kid.Key("Type").Name() == "Page" {
-				if num == 0 {
-					p := Page{kid}
-					return p.Text()
+				n -= c
+
+			case "Page":
+				if n == 0 {
+					return (&Page{kid}).Text()
 				}
-				num--
+				n--
 			}
 		}
 	}
@@ -108,8 +111,8 @@ func (p *Page) Text() (result text.Text, err error) {
 	forEachStream(p, func(stk *stack, op string) {
 		n := stk.Len()
 		args := make([]value, n)
-		for i := n - 1; i >= 0; i-- {
-			args[i] = stk.Pop()
+		for i := range n {
+			args[n-1-i] = stk.Pop()
 		}
 
 		switch op {
@@ -155,9 +158,8 @@ func (p *Page) Text() (result text.Text, err error) {
 			gState.Tj(&out, args[0].RawString())
 		case "TJ":
 			arr := args[0]
-			for i := 0; i < arr.Len(); i++ {
-				e := arr.Index(i)
-				switch e.Kind() {
+			for i := range arr.Len() {
+				switch e := arr.Index(i); e.Kind() {
 				case stringKind:
 					gState.Tj(&out, e.RawString())
 				case integerKind:
