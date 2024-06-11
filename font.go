@@ -127,7 +127,8 @@ func getDecoder(v value) decoder {
 		return charmapEncoding(toUnicode, widths)
 	}
 
-	panic("unsupported encoding: " + v.String())
+	// See 9.6.2.2, Type 1 standard fonts.
+	return encoding.PDFDoc(widths)
 }
 
 func charmapEncoding(toUnicode value, widths widths) decoder {
