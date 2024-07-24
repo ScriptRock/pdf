@@ -114,6 +114,12 @@ Reading:
 			case "pop":
 				stk.Pop()
 				continue
+			case "dup":
+				// See Section 8.2 of Postscript Language Reference, https://www.adobe.com/jp/print/postscript/pdfs/PLRM.pdf.
+				val := stk.Pop()
+				stk.Push(val)
+				stk.Push(val)
+				continue
 			}
 		}
 		b.unreadToken(tok)
